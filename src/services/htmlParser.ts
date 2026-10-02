@@ -1,4 +1,9 @@
-import { MediaDetail, VideoSourceOption } from '../core/interfaces/IMovieSourceProvider';
+import {
+  EpisodeItem,
+  MediaDetail,
+  SeasonItem,
+  VideoSourceOption,
+} from '../core/interfaces/IMovieSourceProvider';
 import { MediaItem } from '../types/media';
 
 /**
@@ -364,4 +369,286 @@ export function parseMovieDetail(rawHtml: string, detailUrl: string): ParsedMovi
     type: 'movie',
     detailUrl,
   };
+}
+
+/**
+ * Dizi detay sayfasını (başlık, açıklama, kapak, türler, sezonlar ve bölümler) parse eder.
+ */
+export function parseSeriesDetail(rawHtml: string, detailUrl: string): MediaDetail {
+  const html = extractHtmlFromResponse(rawHtml);
+
+  // 1. Başlık & Yıl
+  const titleMatch = /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html);
+  const rawTitle = titleMatch ? titleMatch[1] : '';
+  const yearMatch = /\((\d{4})\)/.exec(rawTitle);
+  const year = yearMatch ? yearMatch[1] : undefined;
+  let title = rawTitle.replace(/<[^>]+>/g, '').trim();
+  title = title.replace(/\s*\(\d{4}\)\s*/g, '').replace(/\bizle\b/gi, '').trim();
+  title = decodeHtmlEntities(title);
+
+  // 2. Açıklama
+  let description = '';
+  const articleMatch = /<article[^>]*>([\s\S]*?)<\/article>/i.exec(html);
+  if (articleMatch) {
+    description = articleMatch[1].replace(/<[^>]+>/g, '').trim();
+  }
+  if (!description) {
+    const metaDesc = /<meta[^>]+name="description"[^>]+content="([^"]+)"/i.exec(html);
+    if (metaDesc) {
+      description = metaDesc[1].trim();
+    }
+  }
+  description = decodeHtmlEntities(description);
+
+  // 3. Poster & Backdrop
+  let posterUrl = '';
+  const posterMatch =
+    /"image":"([^"]+)"/i.exec(html) ||
+    /<div class="poster-wrapper"[\s\S]*?src="([^"]+)"/i.exec(html);
+  if (posterMatch) {
+    posterUrl = normalizeUrl(posterMatch[1]);
+  }
+
+  let backdropUrl = '';
+  const coverMatch = /src="([^"]*\/images\/list\/cover\/[^"]*)"/i.exec(html);
+  if (coverMatch) {
+    backdropUrl = normalizeUrl(coverMatch[1]);
+  } else if (posterUrl) {
+    backdropUrl = posterUrl.replace('/poster/', '/cover/');
+  }
+
+  // 4. IMDb
+  const imdbMatch = /class="imdb"[\s\S]*?<\/svg>\s*([\d.]+)/i.exec(html);
+  const imdbRating = imdbMatch ? imdbMatch[1].trim() : undefined;
+
+  // 5. Türler
+  const genres: string[] = [];
+  const genreRegex = /<a[^>]+href="[^"]*\/tur\/[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
+  let gMatch;
+  while ((gMatch = genreRegex.exec(html)) !== null) {
+    const gName = decodeHtmlEntities(gMatch[1].replace(/<[^>]+>/g, '').trim());
+    if (gName && !genres.includes(gName)) {
+      genres.push(gName);
+    }
+  }
+
+  // 6. Sezon Sekmeleri (Season Tabs)
+  const seasonsDict: Record<number, SeasonItem> = {};
+  const seasonTabRegex =
+    /<button[^>]+class="[^"]*section-tab[^"]*"[^>]*data-tab="(\d+)"[^>]*>([\s\S]*?)<\/button>/gi;
+  let stMatch;
+  while ((stMatch = seasonTabRegex.exec(html)) !== null) {
+    const sNum = parseInt(stMatch[1], 10);
+    const sTitle = decodeHtmlEntities(stMatch[2].replace(/<[^>]+>/g, '').trim()) || `Sezon ${sNum}`;
+    seasonsDict[sNum] = {
+      seasonNumber: sNum,
+      title: sTitle,
+      episodes: [],
+    };
+  }
+
+  // 7. Bölümler (Episodes) - Çoklu Strateji ve Güvenli Ayrıştırma Motoru
+  const parsedEpisodeIds = new Set<string>();
+
+  const addEpisodeItem = (
+    epUrl: string,
+    rawSNum: number | undefined,
+    rawEpNum: number | undefined,
+    epBody: string
+  ) => {
+    // 1. Sezon ve Bölüm Numarası Tespiti (URL veya İçerikten)
+    let sNum = rawSNum;
+    let epNum = rawEpNum;
+
+    if (!sNum) {
+      const sMatch = /\/sezon-(\d+)/i.exec(epUrl);
+      if (sMatch) sNum = parseInt(sMatch[1], 10);
+    }
+    if (!epNum) {
+      const epMatch = /\/bolum-(\d+)/i.exec(epUrl);
+      if (epMatch) epNum = parseInt(epMatch[1], 10);
+    }
+
+    // Eğer URL'de bulunamadıysa içerikten ara (örn: "1. Sezon 2. Bölüm")
+    if (!sNum) {
+      const textSMatch = /(\d+)\s*\.\s*Sezon/i.exec(epBody);
+      sNum = textSMatch ? parseInt(textSMatch[1], 10) : 1;
+    }
+    if (!epNum) {
+      const textEpMatch = /(\d+)\s*\.\s*Bölüm/i.exec(epBody);
+      epNum = textEpMatch ? parseInt(textEpMatch[1], 10) : 1;
+    }
+
+    const uniqueId = `${sNum}-${epNum}`;
+    if (parsedEpisodeIds.has(uniqueId)) return;
+    parsedEpisodeIds.add(uniqueId);
+
+    // 2. Başlık
+    const titleM =
+      /<h[3-6][^>]*class="[^"]*mini-poster-title[^"]*"[^>]*>([\s\S]*?)<\/h[3-6]>/i.exec(epBody) ||
+      /<strong[^>]*>([\s\S]*?)<\/strong>/i.exec(epBody) ||
+      /<span[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/span>/i.exec(epBody);
+
+    const epTitle = titleM
+      ? decodeHtmlEntities(titleM[1].replace(/<[^>]+>/g, '').trim())
+      : `${sNum}. Sezon ${epNum}. Bölüm`;
+
+    // 3. Tarih
+    const dateM =
+      /<time[^>]*class="[^"]*episode-date[^"]*"[^>]*>([\s\S]*?)<\/time>/i.exec(epBody) ||
+      /<time[^>]*>([\s\S]*?)<\/time>/i.exec(epBody);
+    const epDate = dateM
+      ? decodeHtmlEntities(dateM[1].replace(/<[^>]+>/g, '').trim())
+      : undefined;
+
+    // 4. Dublaj & Altyazı Rozetleri
+    const isDubbed = epBody.includes('tr-flag') || epBody.toLowerCase().includes('dublaj');
+    const hasSubtitles =
+      epBody.includes('svg') ||
+      epBody.toLowerCase().includes('altyaz') ||
+      epBody.toLowerCase().includes('cc');
+
+    if (!seasonsDict[sNum]) {
+      seasonsDict[sNum] = {
+        seasonNumber: sNum,
+        title: `Sezon ${sNum}`,
+        episodes: [],
+      };
+    }
+
+    seasonsDict[sNum].episodes.push({
+      id: uniqueId,
+      seasonNumber: sNum,
+      episodeNumber: epNum,
+      title: epTitle,
+      episodeDate: epDate,
+      detailUrl: normalizeUrl(epUrl),
+      isDubbed,
+      hasSubtitles,
+    });
+  };
+
+  // Strateji A: 'mini-poster' sınıfına sahip tüm <a> etiketleri (Örn: Star Wars, SWAT vb.)
+  const miniPosterRegex =
+    /<a\b([^>]*\bclass="[^"]*\bmini-poster\b[^"]*"[^>]*)>([\s\S]*?)<\/a>/gi;
+  let mpMatch;
+  while ((mpMatch = miniPosterRegex.exec(html)) !== null) {
+    const fullTagAttributes = mpMatch[1];
+    const epBody = mpMatch[2];
+    const hrefM = /href="([^"]+)"/i.exec(fullTagAttributes);
+    if (!hrefM) continue;
+
+    const epUrl = hrefM[1];
+    if (!epUrl.includes('/bolum-') && !epUrl.includes('/sezon-')) continue;
+
+    const sMatch = /\/sezon-(\d+)/i.exec(epUrl);
+    const epMatch = /\/bolum-(\d+)/i.exec(epUrl);
+
+    addEpisodeItem(
+      epUrl,
+      sMatch ? parseInt(sMatch[1], 10) : undefined,
+      epMatch ? parseInt(epMatch[1], 10) : undefined,
+      epBody
+    );
+  }
+
+  // Strateji B (Yedek/Fallback): Eğer Strateji A ile hiç bölüm bulunamadıysa doğrudan tüm /bolum- linklerini tara
+  if (parsedEpisodeIds.size === 0) {
+    const fallbackEpRegex =
+      /<a\b[^>]*href="([^"]*\/bolum-(\d+)[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+    let fbMatch;
+    while ((fbMatch = fallbackEpRegex.exec(html)) !== null) {
+      const epUrl = fbMatch[1];
+      const epNum = parseInt(fbMatch[2], 10);
+      const sMatch = /\/sezon-(\d+)/i.exec(epUrl);
+      const sNum = sMatch ? parseInt(sMatch[1], 10) : 1;
+      const epBody = fbMatch[3];
+
+      addEpisodeItem(epUrl, sNum, epNum, epBody);
+    }
+  }
+
+  // Sezonları ve bölümleri sayısal sırala
+  const seasons: SeasonItem[] = Object.values(seasonsDict).sort(
+    (a, b) => a.seasonNumber - b.seasonNumber
+  );
+
+  seasons.forEach((season) => {
+    season.episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+  });
+
+  return {
+    id: detailUrl,
+    title,
+    year,
+    imdbRating,
+    posterUrl,
+    backdropUrl,
+    description,
+    genres,
+    actors: [],
+    sources: [],
+    seasons,
+    type: 'series',
+    detailUrl,
+  };
+}
+
+/**
+ * HdFilmCehennemi AJAX arama sonuçlarını (JSON içindeki HTML snippet dizisini) MediaItem[] dizisine dönüştürür.
+ */
+export function parseSearchResults(htmlSnippets: string[]): MediaItem[] {
+  if (!Array.isArray(htmlSnippets) || htmlSnippets.length === 0) {
+    return [];
+  }
+
+  const items: MediaItem[] = [];
+
+  for (const block of htmlSnippets) {
+    if (!block || typeof block !== 'string') continue;
+
+    const hrefMatch = /href="([^"]+)"/i.exec(block);
+    if (!hrefMatch) continue;
+    const detailUrl = normalizeUrl(hrefMatch[1]);
+
+    const imgMatch = /<img[^>]+(?:src|data-src)="([^"]+)"/i.exec(block);
+    let posterUrl = imgMatch ? normalizeUrl(imgMatch[1]) : '';
+    // Yüksek çözünürlük için thumb yerine list poster kullan
+    if (posterUrl.includes('/images/thumb/poster/')) {
+      posterUrl = posterUrl.replace('/images/thumb/poster/', '/images/list/poster/');
+    }
+
+    const titleMatch = /<h4[^>]*class="title"[^>]*>([\s\S]*?)<\/h4>/i.exec(block);
+    const title = decodeHtmlEntities(titleMatch ? titleMatch[1] : '');
+    if (!title) continue;
+
+    const yearMatch = /<span class="year">([^<]+)<\/span>/i.exec(block);
+    const year = yearMatch ? yearMatch[1].trim() : undefined;
+
+    const imdbMatch = /<span class="imdb"[^>]*>[\s\S]*?<\/svg>\s*([\d.]+)/i.exec(block);
+    const imdbRating = imdbMatch ? imdbMatch[1].trim() : undefined;
+
+    const typeMatch = /<span class="type">([^<]+)<\/span>/i.exec(block);
+    const typeText = typeMatch ? typeMatch[1].trim() : '';
+
+    const isSeries =
+      detailUrl.includes('/dizi/') ||
+      typeText.toLowerCase().includes('dizi');
+
+    const id = `search-${detailUrl.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-')}`;
+
+    items.push({
+      id,
+      title,
+      posterUrl,
+      backdropUrl: posterUrl ? posterUrl.replace('/poster/', '/cover/') : undefined,
+      year,
+      imdbRating,
+      type: isSeries ? 'series' : 'movie',
+      languageBadge: typeText || (isSeries ? 'Dizi' : 'Film'),
+      detailUrl,
+    });
+  }
+
+  return items;
 }

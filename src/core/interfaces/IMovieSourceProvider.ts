@@ -18,6 +18,23 @@ export interface VideoSourceOption {
   language: string; // 'dual', 'tr', 'sub'
 }
 
+export interface EpisodeItem {
+  id: string;
+  seasonNumber: number;
+  episodeNumber: number;
+  title: string;
+  episodeDate?: string;
+  detailUrl: string;
+  isDubbed?: boolean;
+  hasSubtitles?: boolean;
+}
+
+export interface SeasonItem {
+  seasonNumber: number;
+  title: string;
+  episodes: EpisodeItem[];
+}
+
 export interface MediaDetail extends MediaItem {
   description: string;
   duration?: string;
@@ -27,6 +44,7 @@ export interface MediaDetail extends MediaItem {
   country?: string;
   trailerUrl?: string;
   sources: VideoSourceOption[];
+  seasons?: SeasonItem[];
 }
 
 export interface PaginatedResult {

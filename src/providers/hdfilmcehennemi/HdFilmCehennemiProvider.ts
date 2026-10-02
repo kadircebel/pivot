@@ -10,6 +10,8 @@ import {
   extractPaginationInfo,
   parseMovieDetail,
   parsePosterItems,
+  parseSearchResults,
+  parseSeriesDetail,
   parseSliderItems,
 } from '../../services/htmlParser';
 import { MediaItem } from '../../types/media';
@@ -492,19 +494,60 @@ export class HdFilmCehennemiProvider implements IMovieSourceProvider {
   }
 
   async search(query: string): Promise<PaginatedResult> {
-    const url = `${this.baseUrl}/search/?q=${encodeURIComponent(query)}`;
-    const html = await this.fetchHtml(url);
-    const items = parsePosterItems(html);
-    return {
-      items,
-      currentPage: 1,
-      hasNextPage: false,
-    };
+    const cleanQuery = query.trim();
+    // Eğer arama sorgusu boş ise popüler arama önerilerini getir (/search)
+    const url = cleanQuery
+      ? `${this.baseUrl}/search?q=${encodeURIComponent(cleanQuery)}`
+      : `${this.baseUrl}/search`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          ...DEFAULT_HEADERS,
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'fetch',
+          Referer: `${this.baseUrl}/`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Search HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const resultsHtmlArray = Array.isArray(data?.results) ? data.results : [];
+      const items = parseSearchResults(resultsHtmlArray);
+
+      return {
+        items,
+        currentPage: 1,
+        hasNextPage: false,
+      };
+    } catch (err) {
+      console.warn('HdFilmCehennemi search error:', err);
+      // Fallback: Çevrimdışı / hata durumunda anasayfa snapshot içeriklerinde yerel filtreleme yap
+      const fallbackItems = SNAPSHOT_YENI_EKLENENLER.filter((item) =>
+        item.title
+          .toLocaleLowerCase('tr-TR')
+          .includes(cleanQuery.toLocaleLowerCase('tr-TR'))
+      );
+      return {
+        items: fallbackItems,
+        currentPage: 1,
+        hasNextPage: false,
+      };
+    }
   }
 
   async getDetails(detailUrl: string): Promise<MediaDetail> {
     try {
       const html = await this.fetchHtml(detailUrl);
+      const isSeriesMain = detailUrl.includes('/dizi/') && !detailUrl.includes('/bolum-');
+      if (isSeriesMain) {
+        return parseSeriesDetail(html, detailUrl);
+      }
       const detail = parseMovieDetail(html, detailUrl);
       return detail;
     } catch (err) {

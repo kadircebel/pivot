@@ -27,6 +27,14 @@ Bu dosya, **MovieTvApp** projesinde çalışan yapay zeka asistanının uymak zo
 
 ---
 
+## 1.2. Git ve Versiyon Kontrolü Yönetimi (Yalnızca Kullanıcı)
+
+- **KATI KURAL**: Asistan KESİNLİKLE hiçbir git komutunu (`git add`, `git commit`, `git push`, `git pull`, `git rebase`, `git checkout` vb.) terminalde KENDİLİĞİNDEN ÇALIŞTIRMAZ.
+- Tüm git, commit ve GitHub push/pull işlemleri **YALNIZCA VE BİZZAT KULLANICI** tarafından terminalden yürütülür.
+- Asistan yalnızca kullanıcı açıkça talep ettiğinde hangi komutların çalıştırılması gerektiğine dair metin tabanlı öneri veya commit mesajı sunabilir.
+
+---
+
 ## 2. Donanım ve Platform Kuralları (Next - Start 4K TV Box & Android TV)
 
 1. **D-Pad Odaklanma Zorunluluğu (100% Remote-Driven)**:

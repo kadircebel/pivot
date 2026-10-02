@@ -419,17 +419,39 @@ export const MovieDetailScreen: React.FC<MovieDetailScreenProps> = ({
         <View style={styles.resolvingOverlay}>
           <Text style={styles.errorModalTitle}>⚠ Video Yükleme Sorunu</Text>
           <Text style={styles.errorModalDesc}>{resolvingError}</Text>
-          <Pressable
-            focusable={true}
-            hasTVPreferredFocus={true}
-            onPress={() => setResolvingError(null)}
-            style={({ focused }) => [
-              styles.retryButton,
-              focused && styles.retryButtonFocused,
-            ]}
-          >
-            <Text style={styles.retryButtonText}>Kapat</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 16 }}>
+            {sources.length > 1 && (
+              <Pressable
+                focusable={true}
+                hasTVPreferredFocus={true}
+                onPress={() => {
+                  setResolvingError(null);
+                  const nextIdx = (currentSourceIndex + 1) % sources.length;
+                  handleSelectSource(sources[nextIdx], nextIdx);
+                }}
+                style={({ focused }) => [
+                  styles.retryButton,
+                  focused && styles.retryButtonFocused,
+                  { backgroundColor: '#E50914', borderColor: '#FFFFFF' },
+                ]}
+              >
+                <Text style={styles.retryButtonText}>
+                  {`Diğer Kaynağa Geç (${(currentSourceIndex + 1) % sources.length + 1}/${sources.length})`}
+                </Text>
+              </Pressable>
+            )}
+            <Pressable
+              focusable={true}
+              hasTVPreferredFocus={sources.length <= 1}
+              onPress={() => setResolvingError(null)}
+              style={({ focused }) => [
+                styles.retryButton,
+                focused && styles.retryButtonFocused,
+              ]}
+            >
+              <Text style={styles.retryButtonText}>Kapat</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 

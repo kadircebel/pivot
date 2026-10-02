@@ -5,6 +5,7 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { MovieDetailScreen } from '../screens/MovieDetailScreen';
 import { MoviesScreen } from '../screens/MoviesScreen';
 import { SearchScreen } from '../screens/SearchScreen';
+import { SeriesDetailScreen } from '../screens/SeriesDetailScreen';
 import { SeriesScreen } from '../screens/SeriesScreen';
 import { Colors } from '../theme/colors';
 import { MediaItem } from '../types/media';
@@ -28,14 +29,25 @@ export const TVMainContainer: React.FC = () => {
     setSelectedMovie(null);
   }, []);
 
-  // Eğer bir film seçilmişse Film Detay ve Oynatıcı ekranını göster
+  // Eğer bir film veya dizi seçilmişse ilgili Detay ve Oynatıcı ekranını göster (Sol menü detay ekranlarında yer almaz)
   if (selectedMovie) {
+    const isSeries =
+      selectedMovie.type === 'series' ||
+      selectedMovie.detailUrl.includes('/dizi/');
+
     return (
       <View style={styles.fullscreenDetail}>
-        <MovieDetailScreen
-          movie={selectedMovie}
-          onBack={handleBackFromDetail}
-        />
+        {isSeries ? (
+          <SeriesDetailScreen
+            series={selectedMovie}
+            onBack={handleBackFromDetail}
+          />
+        ) : (
+          <MovieDetailScreen
+            movie={selectedMovie}
+            onBack={handleBackFromDetail}
+          />
+        )}
       </View>
     );
   }

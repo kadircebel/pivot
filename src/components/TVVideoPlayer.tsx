@@ -38,11 +38,14 @@ interface SubtitleItem {
 
 interface TVVideoPlayerProps {
   movieTitle: string;
+  episodeTitle?: string;
   stream: ExtractedStream;
   sources: VideoSourceOption[];
   currentSourceIndex: number;
   onClose: () => void;
   onSwitchSource: (source: VideoSourceOption, index: number) => void;
+  hasNextEpisode?: boolean;
+  onNextEpisode?: () => void;
 }
 
 type AspectRatioMode = 'contain' | 'cover' | 'stretch';
@@ -234,13 +237,97 @@ const DrawerItem: React.FC<DrawerItemProps> = React.memo(
   }
 );
 
+interface ErrorButtonProps {
+  buttonRef?: React.Ref<any>;
+  title: string;
+  icon?: string;
+  isPrimary?: boolean;
+  hasPreferredFocus?: boolean;
+  onPress: () => void;
+}
+
+/**
+ * TV Kumandası Uyumlu Oynatma Hatası Butonu
+ */
+const ErrorButton: React.FC<ErrorButtonProps> = React.memo(
+  ({ buttonRef, title, icon, isPrimary, hasPreferredFocus, onPress }) => {
+    const [focused, setFocused] = useState(false);
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+
+    const handleFocus = useCallback(() => {
+      setFocused(true);
+      Animated.timing(scaleAnim, {
+        toValue: 1.08,
+        duration: 120,
+        useNativeDriver: true,
+      }).start();
+    }, [scaleAnim]);
+
+    const handleBlur = useCallback(() => {
+      setFocused(false);
+      Animated.timing(scaleAnim, {
+        toValue: 1.0,
+        duration: 120,
+        useNativeDriver: true,
+      }).start();
+    }, [scaleAnim]);
+
+    return (
+      <Pressable
+        ref={buttonRef}
+        focusable={true}
+        hasTVPreferredFocus={hasPreferredFocus}
+        android_disableSound={true}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onPress={onPress}
+        style={styles.errorButtonWrapper}
+      >
+        <Animated.View
+          style={[
+            styles.errorButton,
+            isPrimary ? styles.errorButtonPrimary : styles.errorButtonSecondary,
+            focused &&
+              (isPrimary
+                ? styles.errorButtonPrimaryFocused
+                : styles.errorButtonSecondaryFocused),
+            { transform: [{ scale: scaleAnim }] },
+          ]}
+        >
+          {icon ? (
+            <Text
+              style={[
+                styles.errorButtonIcon,
+                focused && !isPrimary && styles.errorButtonTextFocusedDark,
+              ]}
+            >
+              {icon}
+            </Text>
+          ) : null}
+          <Text
+            style={[
+              styles.errorButtonText,
+              focused && !isPrimary && styles.errorButtonTextFocusedDark,
+            ]}
+          >
+            {title}
+          </Text>
+        </Animated.View>
+      </Pressable>
+    );
+  }
+);
+
 export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
   movieTitle,
+  episodeTitle,
   stream,
   sources,
   currentSourceIndex,
   onClose,
   onSwitchSource,
+  hasNextEpisode,
+  onNextEpisode,
 }) => {
   const [paused, setPaused] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -287,7 +374,27 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
     subtitle: useRef<any>(null),
     aspect: useRef<any>(null),
     sources: useRef<any>(null),
+    nextEp: useRef<any>(null),
   };
+
+  const errorSwitchRef = useRef<any>(null);
+  const errorCloseRef = useRef<any>(null);
+
+  // Oynatma hatası oluştuğunda odağı anında ve kesin olarak butonlara aktar
+  useEffect(() => {
+    if (errorMsg) {
+      const timer = setTimeout(() => {
+        if (sources.length > 1 && errorSwitchRef.current) {
+          errorSwitchRef.current.requestTVFocus?.();
+          errorSwitchRef.current.focus?.();
+        } else if (errorCloseRef.current) {
+          errorCloseRef.current.requestTVFocus?.();
+          errorCloseRef.current.focus?.();
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMsg, sources.length]);
 
   // Ses / Dublaj Kanalları
   const [availableAudio, setAvailableAudio] = useState<
@@ -471,6 +578,10 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
   // Donanımsal Geri Tuşu Yönetimi
   useEffect(() => {
     const handleBack = () => {
+      if (errorMsg) {
+        onClose();
+        return true;
+      }
       if (drawerType) {
         closeDrawer();
         return true;
@@ -485,7 +596,7 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
 
     const sub = BackHandler.addEventListener('hardwareBackPress', handleBack);
     return () => sub.remove();
-  }, [drawerType, controlsVisible, closeDrawer, onClose]);
+  }, [errorMsg, drawerType, controlsVisible, closeDrawer, onClose]);
 
   // Akıllı ve debounced sarma (seek) işlemi
   const handleSeek = useCallback(
@@ -547,6 +658,12 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
         return;
       }
 
+      // HATA EKRANI AÇIKKEN: TV Kumanda D-Pad olaylarını kesinlikle engelleme!
+      // Native TV odak sistemi butonlar ("Diğer Kaynağa Geç" ve "Kapat ve Çık") arasında serbestçe dolaşsın ve OK basabilsin
+      if (errorMsg) {
+        return;
+      }
+
       const eventType = evt?.eventType;
 
       // Çekmece açıkken: Sol veya Geri tuşuna basıldığında çekmeceyi kapat
@@ -593,6 +710,7 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
       }
     },
     [
+      errorMsg,
       drawerType,
       controlsVisible,
       closeDrawer,
@@ -880,6 +998,16 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
     setErrorMsg('Video akışı oynatılırken bir sorun oluştu.');
   }, []);
 
+  const handleEnd = useCallback(() => {
+    if (hasNextEpisode && onNextEpisode) {
+      triggerHud('⏭ Sonraki Bölüme Geçiliyor...');
+      onNextEpisode();
+    } else {
+      setPaused(true);
+      setControlsVisible(true);
+    }
+  }, [hasNextEpisode, onNextEpisode, triggerHud]);
+
   // Doğrudan piksel boyutlandırma ile en-boy oranı (SurfaceView / Media3 kısıtlamalarını %100 çözer)
   const videoStyle = useMemo(() => {
     // 1. 16:9 Ekranı Kapla (Uzat): 16:9 ekranın tamamına esnetilir, kenarlar kesilmez, sıfır siyah bar
@@ -963,6 +1091,7 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
           disableFocus={true}
           onBuffer={handleBuffer}
           onError={handleError}
+          onEnd={handleEnd}
           selectedAudioTrack={selectedAudio}
         />
       </View>
@@ -984,8 +1113,8 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
 
       {/* Arka plan odak ve tıklama yakalayıcı: Kontroller gizliyken TV Kumanda OK tuşu anında Play/Pause yapar */}
       <Pressable
-        focusable={!drawerType}
-        hasTVPreferredFocus={!controlsVisible && !drawerType}
+        focusable={!drawerType && !errorMsg}
+        hasTVPreferredFocus={!controlsVisible && !drawerType && !errorMsg}
         android_disableSound={true}
         onPress={togglePlayPause}
         style={styles.backgroundFocusCatcher}
@@ -1016,8 +1145,15 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
           <Text style={styles.errorDescription}>{errorMsg}</Text>
           <View style={styles.errorButtonsRow}>
             {sources.length > 1 && (
-              <TVControlButton
-                title="Diğer Kaynağa Geç"
+              <ErrorButton
+                buttonRef={errorSwitchRef}
+                title={
+                  sources.length === 2
+                    ? `Diğer Kaynağa Geç (${sources[(currentSourceIndex + 1) % sources.length]?.name || 'Kaynak 2'})`
+                    : `Diğer Kaynağa Geç (${(currentSourceIndex + 1) % sources.length + 1}/${sources.length})`
+                }
+                icon="🔄"
+                isPrimary={true}
                 hasPreferredFocus={true}
                 onPress={() => {
                   setErrorMsg(null);
@@ -1026,7 +1162,14 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
                 }}
               />
             )}
-            <TVControlButton title="Kapat ve Çık" onPress={onClose} />
+            <ErrorButton
+              buttonRef={errorCloseRef}
+              title="Kapat ve Çık"
+              icon="✕"
+              isPrimary={sources.length <= 1}
+              hasPreferredFocus={sources.length <= 1}
+              onPress={onClose}
+            />
           </View>
         </View>
       )}
@@ -1048,7 +1191,7 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
               <Text style={styles.backButtonText}>‹ Geri Dön</Text>
             </Pressable>
             <Text style={styles.videoTitleText} numberOfLines={1}>
-              {movieTitle}
+              {episodeTitle ? `${movieTitle} • ${episodeTitle}` : movieTitle}
             </Text>
             <View style={styles.sourceBadge}>
               <Text style={styles.sourceBadgeText}>
@@ -1159,6 +1302,20 @@ export const TVVideoPlayer: React.FC<TVVideoPlayerProps> = ({
                   hasPreferredFocus={preferredFocusKey === 'sources'}
                   onFocusCallback={() => setPreferredFocusKey('sources')}
                   onPress={() => openDrawer('sources')}
+                />
+              )}
+
+              {/* Sonraki Bölüm Butonu (Diziler İçin) */}
+              {hasNextEpisode && onNextEpisode && (
+                <TVControlButton
+                  key={`btn-next-ep-${focusEpoch}`}
+                  id="nextEp"
+                  buttonRef={controlRefs.nextEp}
+                  title="Sonraki Bölüm"
+                  icon="⏭"
+                  hasPreferredFocus={preferredFocusKey === 'nextEp'}
+                  onFocusCallback={() => setPreferredFocusKey('nextEp')}
+                  onPress={onNextEpisode}
                 />
               )}
             </View>
@@ -1636,21 +1793,74 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
+    zIndex: 99999,
+    elevation: 24,
   },
   errorTitle: {
     color: '#FFFFFF',
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '900',
     marginBottom: 12,
+    letterSpacing: 0.5,
   },
   errorDescription: {
     color: '#CCCCCC',
     fontSize: 16,
-    marginBottom: 24,
+    marginBottom: 28,
     textAlign: 'center',
+    maxWidth: 500,
+    lineHeight: 24,
   },
   errorButtonsRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 18,
+    alignItems: 'center',
+  },
+  errorButtonWrapper: {
+    borderRadius: 8,
+  },
+  errorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+    paddingVertical: 13,
+    borderRadius: 8,
+    minWidth: 170,
+  },
+  errorButtonPrimary: {
+    backgroundColor: '#1E1E1E',
+    borderWidth: 1.5,
+    borderColor: '#444444',
+  },
+  errorButtonPrimaryFocused: {
+    backgroundColor: '#E50914',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    elevation: 12,
+  },
+  errorButtonSecondary: {
+    backgroundColor: '#1E1E1E',
+    borderWidth: 1.5,
+    borderColor: '#333333',
+  },
+  errorButtonSecondaryFocused: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    elevation: 12,
+  },
+  errorButtonIcon: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    marginRight: 8,
+  },
+  errorButtonText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  errorButtonTextFocusedDark: {
+    color: '#000000',
   },
 });
