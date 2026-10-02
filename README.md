@@ -1,97 +1,82 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# 🛋️ PIVOT (Android TV & TV Box)
 
-# Getting Started
+> *"PIVOT! PIVOT! PIIIVVOOOTTT!!" — Ross Geller*  
+> Koltuğunuzdan kalkmadan, uzaktan kumandanızla film ve diziler arasında akıcı ve keyifli geçiş yapabileceğiniz modern Android TV medya uygulaması.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+---
 
-## Step 1: Start Metro
+## 🚀 Özellikler
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+- **%100 Uzaktan Kumanda (D-Pad) Navigasyonu:** Dokunmatik ekran gerektirmez; standart Android TV ve Bluetooth kumandalarla (Yukarı, Aşağı, Sol, Sağ, OK, Geri) kusursuz odak yönetimi.
+- **Netflix TV Tasarımı:**
+  - Saf koyu tema (`#121212` / `#0F0F0F`).
+  - Açılışta profil seçimi olmadan doğrudan zengin içerik ekranı.
+  - Öne çıkan içerik afişi (Billboard Hero Banner).
+  - 3 kolonlu (`numColumns={3}`) ferah kategori ızgarası ve otomatik ekran merkezleme (`scrollToOffset`).
+- **Native ExoPlayer Video Oynatıcı:**
+  - **16:9 Tam Ekran Modu:** `SurfaceView` donanım katmanını piksel bazında dinamik boyutlandırarak sinemaskop siyah barları tamamen yok eden `cover` modu.
+  - **Yerel Altyazı Motoru (Native Subtitle Engine):** WebVTT ayrıştırıcı, saydam arka plan, 24px yüksek kontrastlı gölgelendirme ve otomatik Türkçe altyazı önceliği.
+  - **Akıllı Hızlı Sarma (Debounced Seek):** Kumandadan hızlı tıklamalarda ses çökmesini engelleyen 350ms tampon korumalı sarma HUD göstergesi.
+  - **IPTV Yan Çekmece Menüsü:** Video oynatılırken ses kanalı, altyazı, en-boy oranı ve video kaynağı değiştirme menüsü.
+- **2GB RAM Bellek Optimizasyonu:**
+  - Düşük donanımlı TV kutuları (Next Start 4K, Xiaomi Mi Box, vb.) için `backBufferDurationMs: 0` ile `BufferPool2.0` RAM şişmesi ve ses cızırtısı tamamen önlenmiştir.
+- **Çoklu Kaynak Mimarisi (Multi-Source Provider Pattern):**
+  - Arayüz ile veri çekme motoru birbirinden tamamen bağımsızdır (`IMovieSourceProvider` mimarisi).
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+---
 
-```sh
-# Using npm
-npm start
+## 🛠️ Teknolojiler
 
-# OR using Yarn
-yarn start
+- **Framework:** [React Native TVOS](https://github.com/react-native-tvos/react-native-tvos) (v0.83)
+- **Dil:** TypeScript
+- **Video Çözücü:** `react-native-video` (ExoPlayer / Android Media3)
+- **Ayrıştırma (Parser):** `cheerio`
+- **Hedef Cihazlar:** Android TV 7.0+ (API 24 - API 36), Next Start 4K, Xiaomi Mi Box / Stick, Google TV, AOSP TV Box'lar.
+
+---
+
+## 📦 Kurulum ve Çalıştırma
+
+### Gereksinimler
+- Node.js (v18+)
+- Android SDK (API 34 veya 36)
+- Java 17
+
+### 1. Bağımlılıkları Yükleyin
+```bash
+npm install
 ```
 
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+### 2. JS Paketini Derleyin
+```bash
+npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
 ```
 
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+### 3. Debug APK Derleyin
+```bash
+cd android
+./gradlew assembleDebug
 ```
 
-Then, and every time you update your native dependencies, run:
+Derlenen APK: `android/app/build/outputs/apk/debug/app-debug.apk` yolunda oluşturulacaktır.
 
-```sh
-bundle exec pod install
+### 4. TV Kutusuna veya Emülatöre Yükleyin
+```bash
+adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+---
 
-```sh
-# Using npm
-npm run ios
+## 📄 Lisans (License)
 
-# OR using Yarn
-yarn ios
-```
+Bu proje **GNU General Public License v3.0 (GPL-3.0)** altında lisanslanmıştır.
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+- Bu yazılımın kaynak kodları herkese açıktır.
+- Kodlar ticari amaçla satılamaz, ücretli dağıtılamaz veya kapalı devre bir ürün haline getirilemez.
+- Kod üzerinde yapılan herhangi bir değişiklik ve geliştirme yine GPL-3.0 lisansı ile açık kaynak olarak paylaşılmak zorundadır.
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+---
 
-## Step 3: Modify your app
+## ⚖️ Yasal Uyarı (Disclaimer)
 
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+Bu uygulama yalnızca **eğitim ve hobi** amaçlı geliştirilmiş bir medya oynatıcı istemcisidir. Uygulama kendi sunucularında hiçbir video veya telifli medya dosyası barındırmaz; yalnızca internette herkese açık olarak sağlanan kaynakları ayrıştırır. Tüm telif hakları ilgili hak sahiplerine aittir.
