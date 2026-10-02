@@ -53,3 +53,7 @@ android/app/src/main/assets/index.android.bundle.meta
 
 # Logs
 *.log
+
+# Git'e dahil edilecek root build klasörü ve APK
+!/build/
+!/build/*.apk
