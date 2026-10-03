@@ -5,10 +5,25 @@
 
 ---
 
+<p align="center">
+  <img src="docs/pivot-home.png" alt="PIVOT TV Arayüzü" width="100%" />
+</p>
+
+---
+
+## 📥 İndir & Build (v1.0 Beta Deneme Sürümü)
+
+Uygulamayı herhangi bir derleme yapmadan doğrudan Android TV veya TV Box cihazınızda denemek için hazır derlenmiş bağımsız (standalone) APK dosyasını kullanabilirsiniz:
+
+- ⬇️ **[MovieTvApp-release.apk (v1.0 Beta)](build/MovieTvApp-release.apk)**  
+  *(Bağımsız Release derlemesi — Geliştirici sunucusu veya Metro bağlantısı gerektirmez, doğrudan USB veya dosya yöneticisiyle TV kutusuna yüklenebilir.)*
+
+---
+
 ## 🚀 Özellikler
 
 - **%100 Uzaktan Kumanda (D-Pad) Navigasyonu:** Dokunmatik ekran gerektirmez; standart Android TV ve Bluetooth kumandalarla (Yukarı, Aşağı, Sol, Sağ, OK, Geri) kusursuz odak yönetimi.
-- **Netflix TV Tasarımı:**
+- **Modern TV Arayüzü:**
   - Saf koyu tema (`#121212` / `#0F0F0F`).
   - Açılışta profil seçimi olmadan doğrudan zengin içerik ekranı.
   - Öne çıkan içerik afişi (Billboard Hero Banner).
