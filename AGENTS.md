@@ -73,6 +73,13 @@ Bu dosya, **MovieTvApp** projesinde çalışan yapay zeka asistanının uymak zo
 3. **Bileşen Düzeni**:
    - Üstte büyük öne çıkan içerik (Billboard Hero Banner).
    - Altında yatay kaydırılabilir satırlar (Horizontal Media Rows).
+4. **Anasayfa Yatay Satırlarında Sabit Satır Başı Odaklanma (Carousel / Conveyor UX)**:
+   - Anasayfadaki yatay medya satırlarında (`HorizontalMediaRow`), kumandadan sağ oka basıldıkça odağın ekranın sağına doğru gezmesi engellenir.
+   - Aktif seçili kart daima satır başında (`x = 0`) sabit tutulur; kullanıcı sağa bastıkça liste `CARD_STEP = 138` piksel kayarak bir sonraki kartı satır başına taşır (`flatListRef.current?.scrollToOffset({ offset: index * CARD_STEP, animated: true })`).
+   - Listenin sonundaki kartların da satır başına gelebilmesi için `paddingRight: 800` sağ tamponu zorunludur.
+5. **Yatay Satır Odak Sınırları ve Menü Geçiş Kuralı (Anti-Jumping)**:
+   - **Satır Sonu Sağ Ok Koruması**: Slider sonundaki karttayken sağ oka basıldığında odağın alt satıra atlaması kesinlikle engellenir. `HorizontalMediaRow` kapsayıcısında `TVFocusGuideView trapFocusRight={true}` ve son kartta `nextFocusRight={selfTag}` kullanılır; kullanıcı alt satıra sadece açıkça AŞAĞI tuşuna basarak geçebilir.
+   - **Satır Başı Sol Ok Menü Geçişi**: Herhangi bir satırın ilk kartındayken (`index === 0`) sol oka basıldığında odak ASLA üst satıra sıçrayamaz, doğrudan sol navigasyon menüsüne (`TVSidebar`) geçer. Bunu bozan satır bazlı yapay `<TVFocusGuideView autoFocus={true}>` sarmalayıcıları KULLANILMAZ.
 
 ---
 
@@ -147,3 +154,43 @@ Bu dosya, **MovieTvApp** projesinde çalışan yapay zeka asistanının uymak zo
    - Film detay sayfasında birden fazla kaynak butonu (Kaynak 1, Kaynak 2 vb.) yerine tek bir **'▶ Hemen İzle'** butonu gösterilir (`hasTVPreferredFocus={true}`, odaklandığında `#E50914` kırmızı arka plan, 1.06 scale).
    - Alternatif video kaynakları doğrudan video oynatıcı (`TVVideoPlayer`) içerisindeki IPTV alt kontrol çubuğunda bulunan **'Kaynaklar (x/y)'** yan menüsü üzerinden kumandayla kolayca değiştirilir.
 
+---
+
+## 9. Android TV FlatList Yükseklik Çökmesi (Height Collapse) ve Grid Ortalama Kuralları
+
+1. **FlatList'te `style={{ flex: 1 }}` Yasağı (Siyah Ekran / 2px Çökme Önlemi)**:
+   - **Hata**: Başlık (`header`) veya kardeş bileşen içeren ekranlarda `<FlatList style={{ flex: 1 }}>` stili verildiğinde, Android React Native Yoga/ReactScrollView motoru dikey yüksekliği hesaplayamaz ve FlatList'i tam 1-2 piksele sıkıştırarak listenin kaybolmasına ve ekranın tamamen siyah kalmasına yol açar.
+   - **Kural**: `<FlatList>` bileşenine ASLA `style={{ flex: 1 }}` verilmez. Yalnızca `contentContainerStyle` kullanılır.
+   - Ekran kapsayıcısının ve `contentArea`'nın tam dikey yayılmasını garanti etmek için `contentArea: { flex: 1, height: '100%' }` tanımlanır.
+2. **Katalog Grid Simetrik Ortalama ve Menü Kesilmesini Önleme Standardı**:
+   - 1080p Android TV genişliği **960 DP**'dir. Sol menü **64 DP** kaplar, geriye **896 DP** alan kalır.
+   - 5 kolonlu film/dizi kataloglarında:
+     - Kart genişliği: `width: 144`, kart yüksekliği: `height: 180` (ekrana 2 tam satır sığar).
+     - Kartlar arası yatay boşluk: `columnWrapper: { gap: 24, marginBottom: 16 }`.
+     - $5 \times 144 + 4 \times 24 = 816\text{ DP}$.
+     - Kalan 80 DP, sol ve sağa eşit dağıtılarak `header` ve `gridContent` için `paddingHorizontal: 40` olarak sabitlenir ($40 + 816 + 40 = 896\text{ DP}$).
+   - İlk kart sol menü sınırından (`x = 64`) tam 40 piksel uzakta başlar. Kart afişi ve başlık metni tek parça halinde zoomlansa dahi menünün opak siyah katmanı altına girip dikey kesilmeye uğrayamaz; liste ekranın sağına ve soluna göre tam simetrik ortalanır.
+3. **Çalışan Scraper / Veri Motoruna Gereksiz Müdahale Yasağı**:
+   - UI veya Flexbox kaynaklı görüntüleme/düzenleme sorunlarında çalışan veri çekme katmanına (`HdFilmCehennemiProvider.ts`) keyfi müdahale edilmez, `AbortController` veya yapay timeout eklenerek canlı isteklerin yarıda kesilmesine izin verilmez.
+4. **Dinamik Sayfalamada (`loadMore`) Android ScrollView Satır Hizalama Koruması**:
+   - **Hata**: Listede aşağı inildikçe yeni sayfa verisi (`loadMore`) çekildiğinde veya footer loader açılıp kapandığında, Android native `ReactScrollView.onLayout()` mekanizması devreye girip `scrollToChild(mFocused)` çağırarak aktif seçili kartı ekranın ortasına iter. Bu durum üstteki satırın tavanda, alttaki satırın ise tabanda yarı yarıya kesik kalmasına yol açar.
+   - **Çözüm & Standart**:
+     - **Matematiksel Sıfır Sapma (`ROW_HEIGHT = 240`)**: Kart yüksekliği net `230px` (afiş: 170, `cardInfo`: 48, `paddingVertical`: 4), `marginBottom: 10px` tutulur. Böylece her bir satır tam olarak $230 + 10 = 240.00\text{ DP}$ olur; 100 satır inilse dahi 1 piksel kümülatif sapma oluşmaz.
+     - **Sabit Footer (`height: 60`)**: Yükleyici alt bilgi daima sabit 60px yükseklikte kalır; sayfa yüklenirken veya bittiğinde liste boyutu zıplamaz.
+     - **Kesintisiz Batch Render**: `initialNumToRender={30}`, `maxToRenderPerBatch={30}`, `windowSize={11}` ile yeni sayfanın tamamı tek karede basılır, parçalı render kaynaklı scroll clamping engellenir.
+     - **Post-Layout Scroll Doğrulama**: `[items.length]` değiştiğinde `useEffect` içinde 50ms gecikmeyle `scrollToOffset({ offset: lastRowIndexRef.current * ROW_HEIGHT, animated: true })` yeniden uygulanarak Android native layout motorunun satır hizasını bozması kesin olarak engellenir.
+
+
+---
+
+## 10. Android TV Arama Sayfası ve Yerel Sistem Klavyeli (IME) UX Standartları
+
+1. **Özel Ekran Klavyesi (Matrix Keyboard) Yasağı**:
+   - Arama ekranında harf harf gezilen 40 tuşluk yapay UI klavyesi kesinlikle KULLANILMAYACAKTIR (aşırı lag, D-pad gezintisi yavaşlığı ve sesli arama eksikliği nedeniyle).
+2. **Yerel Android TV IME ve Sesli Arama (Microphone)**:
+   - `<TextInput>` bileşeni `focusable={true}`, `hasTVPreferredFocus={true}`, `showSoftInputOnFocus={true}` ve `returnKeyType="search"` ile kullanılır.
+   - Kumandadan `OK` tuşuna basıldığında Android TV'nin yerel klavyesi (Gboard / Leanback IME) ekranın altından açılarak donanım hızlandırmalı yazma, kelime tamamlama ve kumanda mikrofonu ile Türkçe sesli arama sağlar.
+   - `onChangeText` ile 400ms debounced canlı arama tetiklenir; klavyeden Enter/Ara tuşuna basıldığında `onSubmitEditing` anında aramayı sonuçlandırır.
+3. **5 Kolonlu Simetrik Arama Izgarası**:
+   - Arama sonuçları tüm ekran genişliğini kullanır (`numColumns={5}`, kart boyutu 140x170, `paddingHorizontal: 46`).
+   - Arama kutusunun altında popüler arama etiketleri (`suggestionChip`) ve temizleme (`✕ Temizle`) butonu yer alır.

@@ -90,6 +90,7 @@ const styles = StyleSheet.create({
   },
   contentArea: {
     flex: 1,
+    height: '100%',
     backgroundColor: Colors.background,
   },
   fullscreenDetail: {

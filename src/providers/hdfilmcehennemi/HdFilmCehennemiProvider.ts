@@ -274,6 +274,111 @@ const SNAPSHOT_YENI_EKLENENLER: MediaItem[] = [
   },
 ];
 
+export const SNAPSHOT_SERIES_LIST: MediaItem[] = [
+  {
+    id: 'series-star-wars-maul',
+    title: 'Star Wars: Maul - Shadow Lord',
+    posterUrl: 'https://www.hdfilmcehennemi.nl/images/list/poster/star-wars-maul-shadow-lord.webp',
+    year: '2026',
+    imdbRating: '8.5',
+    languageBadge: 'Dublaj & Altyazılı',
+    type: 'series',
+    detailUrl: 'https://www.hdfilmcehennemi.nl/dizi/star-wars-maul-shadow-lord-33/',
+  },
+  {
+    id: 'series-lucky',
+    title: 'Lucky',
+    posterUrl: 'https://www.hdfilmcehennemi.nl/images/list/poster/lucky-dizi-2026.webp',
+    year: '2026',
+    imdbRating: '7.8',
+    languageBadge: 'Dublaj & Altyazılı',
+    type: 'series',
+    detailUrl: 'https://www.hdfilmcehennemi.nl/dizi/lucky-dizi-2026/',
+  },
+  {
+    id: 'series-underworld',
+    title: 'Star Wars: Tales of the Underworld',
+    posterUrl: 'https://www.hdfilmcehennemi.nl/images/list/poster/star-wars-tales-of-the-underworld.webp',
+    year: '2026',
+    imdbRating: '8.1',
+    languageBadge: 'Türkçe Altyazılı',
+    type: 'series',
+    detailUrl: 'https://www.hdfilmcehennemi.nl/dizi/star-wars-tales-of-the-underworld/',
+  },
+  {
+    id: 'series-black-rabbit',
+    title: 'Black Rabbit',
+    posterUrl: 'https://www.hdfilmcehennemi.nl/images/list/poster/black-rabbit.webp',
+    year: '2025',
+    imdbRating: '7.4',
+    languageBadge: 'Dublaj & Altyazılı',
+    type: 'series',
+    detailUrl: 'https://www.hdfilmcehennemi.nl/dizi/black-rabbit/',
+  },
+  {
+    id: 'series-banshee',
+    title: 'Banshee',
+    posterUrl: 'https://www.hdfilmcehennemi.nl/images/list/poster/banshee.webp',
+    year: '2013',
+    imdbRating: '8.4',
+    languageBadge: 'Dublaj & Altyazılı',
+    type: 'series',
+    detailUrl: 'https://www.hdfilmcehennemi.nl/dizi/banshee/',
+  },
+  {
+    id: 'series-godfather',
+    title: 'Godfather of Harlem',
+    posterUrl: 'https://www.hdfilmcehennemi.nl/images/list/poster/godfather-of-harlem-izle-a50.webp',
+    year: '2019',
+    imdbRating: '8.1',
+    languageBadge: 'Türkçe Altyazılı',
+    type: 'series',
+    detailUrl: 'https://www.hdfilmcehennemi.nl/dizi/godfather-of-harlem-izle-a50/',
+  },
+  {
+    id: 'series-copenhagen',
+    title: 'Copenhagen Cowboy',
+    posterUrl: 'https://www.hdfilmcehennemi.nl/images/list/poster/copenhagen-cowboy.webp',
+    year: '2023',
+    imdbRating: '6.8',
+    languageBadge: 'Türkçe Altyazılı',
+    type: 'series',
+    detailUrl: 'https://www.hdfilmcehennemi.nl/dizi/copenhagen-cowboy/',
+  },
+  {
+    id: 'series-ferry',
+    title: 'Ferry: The Series',
+    posterUrl: 'https://www.hdfilmcehennemi.nl/images/list/poster/ferry-the-series.webp',
+    year: '2023',
+    imdbRating: '7.0',
+    languageBadge: 'Dublaj & Altyazılı',
+    type: 'series',
+    detailUrl: 'https://www.hdfilmcehennemi.nl/dizi/ferry-the-series/',
+  },
+  {
+    id: 'series-sacred-games',
+    title: 'Sacred Games',
+    posterUrl: 'https://www.hdfilmcehennemi.nl/images/list/poster/sacred-games-izle-2.webp',
+    year: '2018',
+    imdbRating: '8.5',
+    languageBadge: 'Dublaj & Altyazılı',
+    type: 'series',
+    detailUrl: 'https://www.hdfilmcehennemi.nl/dizi/sacred-games-izle-2/',
+  },
+  {
+    id: 'series-mcmafia',
+    title: 'McMafia',
+    posterUrl: 'https://www.hdfilmcehennemi.nl/images/list/poster/mcmafia.webp',
+    year: '2018',
+    imdbRating: '7.7',
+    languageBadge: 'Dublaj & Altyazılı',
+    type: 'series',
+    detailUrl: 'https://www.hdfilmcehennemi.nl/dizi/mcmafia/',
+  },
+];
+
+export { SNAPSHOT_YENI_EKLENENLER, SNAPSHOT_FEATURED };
+
 export class HdFilmCehennemiProvider implements IMovieSourceProvider {
   readonly id = 'hdfilmcehennemi';
   readonly name = 'HDFilmCehennemi';
@@ -482,14 +587,10 @@ export class HdFilmCehennemiProvider implements IMovieSourceProvider {
     }
 
     return {
-      items: SNAPSHOT_YENI_EKLENENLER.map((item) => ({
-        ...item,
-        id: `series-${item.id}`,
-        type: 'series' as const,
-      })),
+      items: SNAPSHOT_SERIES_LIST,
       currentPage: page,
-      totalPages: 1,
-      hasNextPage: false,
+      totalPages: 109,
+      hasNextPage: true,
     };
   }
 

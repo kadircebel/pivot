@@ -59,6 +59,7 @@ export const CATEGORIES: CategoryItem[] = [
 ];
 
 const ROW_HEIGHT = 108; // 92px kart yüksekliği + 16px dikey boşluk (gap)
+const MOVIE_ROW_HEIGHT = 240; // 5 kolonlu film kataloğu satır yüksekliği
 
 /**
  * TV D-Pad Kumanda için Özel 3 Kolonlu Kategori Kartı
@@ -155,6 +156,7 @@ export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ onSelectMovi
   const provider = ProviderRegistry.getActiveProvider();
   const moviesListRef = useRef<FlatList<MediaItem>>(null);
   const categoriesListRef = useRef<FlatList<CategoryItem>>(null);
+  const lastMovieRowIndexRef = useRef<number>(0);
 
   const isFetchingRef = useRef<boolean>(false);
   const pageRef = useRef<number>(1);
@@ -279,11 +281,19 @@ export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ onSelectMovi
     }
   }, [provider]);
 
-  // TV D-Pad Kumanda: Kullanıcı son 2 satırdaki bir karta odaklandığında sonraki sayfayı erkenden çek
+  // TV D-Pad Kumanda: Aşağı inildiğinde aktif seçili satırı tepeye çek ve altındaki görünmeyen satırı ekrana getir
   const handleItemFocus = useCallback(
     (index: number) => {
+      const rowIndex = Math.floor(index / 5);
+      if (rowIndex !== lastMovieRowIndexRef.current) {
+        lastMovieRowIndexRef.current = rowIndex;
+        const targetOffset = rowIndex * MOVIE_ROW_HEIGHT;
+        moviesListRef.current?.scrollToOffset({ offset: targetOffset, animated: true });
+      }
+
+      // Liste sonuna 3 satır (15 film) kala bir sonraki sayfayı erkenden çek
       if (
-        index >= movies.length - 8 &&
+        index >= movies.length - 15 &&
         !isFetchingRef.current &&
         hasNextRef.current
       ) {
@@ -293,12 +303,23 @@ export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ onSelectMovi
     [loadMore, movies.length]
   );
 
+  // Yeni sayfa eklendiğinde Android ScrollView'ın satır hizasını bozmasını önle
+  useEffect(() => {
+    if (lastMovieRowIndexRef.current > 0) {
+      const targetOffset = lastMovieRowIndexRef.current * MOVIE_ROW_HEIGHT;
+      const timer = setTimeout(() => {
+        moviesListRef.current?.scrollToOffset({ offset: targetOffset, animated: true });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [movies.length]);
+
   const renderMovieCard = useCallback(
     ({ item, index }: { item: MediaItem; index: number }) => (
       <TVFocusableCard
         item={item}
-        width={180}
-        height={270}
+        width={140}
+        height={170}
         hasTVPreferredFocus={index === 0}
         onFocus={() => handleItemFocus(index)}
         onPress={() => onSelectMovie?.(item)}
@@ -307,10 +328,11 @@ export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ onSelectMovi
     [handleItemFocus, onSelectMovie]
   );
 
+  // Sabit yükseklikli alt bilgi (yüklenirken layout kaymasını ve titremeyi kesin olarak önler)
   const renderFooter = useCallback(() => {
     if (loadingMore) {
       return (
-        <View style={styles.footerLoaderBox}>
+        <View style={styles.footerContainer}>
           <ActivityIndicator size="small" color={Colors.primary} />
           <Text style={styles.footerLoadingText}>
             Daha fazla film yükleniyor (Sayfa {pageRef.current + 1})...
@@ -320,20 +342,20 @@ export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ onSelectMovi
     }
     if (!hasNextPage && movies.length > 0) {
       return (
-        <View style={styles.footerInfoBox}>
+        <View style={styles.footerContainer}>
           <Text style={styles.footerEndText}>
             Tüm içerikler yüklendi ({movies.length} Film)
           </Text>
         </View>
       );
     }
-    return <View style={styles.footerSpacer} />;
+    return <View style={styles.footerContainer} />;
   }, [hasNextPage, loadingMore, movies.length]);
 
   // Kategori Filmleri Görünümü (Otomatik Sayfalama ve Geri Tuşu Destekli)
   if (selectedCategory) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, styles.moviesContainer]}>
         <View style={styles.header}>
           <View style={styles.titleRow}>
             <Text style={styles.headerTitle}>{selectedCategory.name}</Text>
@@ -361,19 +383,19 @@ export const CategoriesScreen: React.FC<CategoriesScreenProps> = ({ onSelectMovi
           </Pressable>
         ) : (
           <FlatList
-            key={`category-movies-grid-${selectedCategory.id}`}
+            key={`category-movies-grid-5col-${selectedCategory.id}`}
             ref={moviesListRef}
             data={movies}
             renderItem={renderMovieCard}
             keyExtractor={(item, index) => `${item.id}-${index}`}
-            numColumns={4}
+            numColumns={5}
             columnWrapperStyle={styles.columnWrapper}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.gridContent}
             removeClippedSubviews={false}
             windowSize={11}
-            initialNumToRender={12}
-            maxToRenderPerBatch={8}
+            initialNumToRender={30}
+            maxToRenderPerBatch={30}
             onEndReached={loadMore}
             onEndReachedThreshold={0.5}
             ListFooterComponent={renderFooter}
@@ -536,12 +558,20 @@ const styles = StyleSheet.create({
     color: '#FFEAEA',
     fontWeight: '800',
   },
+  moviesContainer: {
+    paddingLeft: 64,
+    paddingTop: 16,
+  },
+  flatList: {
+    flex: 1,
+  },
   gridContent: {
-    paddingBottom: 40,
+    paddingHorizontal: 46,
+    paddingBottom: 480, // En son satırın dahi ekranın en tepesine kadar çıkabilmesi için tam ekran tampon
   },
   columnWrapper: {
-    gap: 20,
-    marginBottom: 22,
+    gap: 26,
+    marginBottom: 10, // 230 + 10 = 240px satır yüksekliği
   },
   loaderBox: {
     flex: 1,
@@ -563,11 +593,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  footerLoaderBox: {
+  footerContainer: {
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 24,
     gap: 12,
   },
   footerLoadingText: {
@@ -575,17 +605,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  footerInfoBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
-  },
   footerEndText: {
     color: Colors.textMuted,
     fontSize: 13,
     fontWeight: '600',
-  },
-  footerSpacer: {
-    height: 40,
   },
 });

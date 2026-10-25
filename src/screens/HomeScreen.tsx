@@ -68,14 +68,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectMovie }) => {
     loadData();
   }, [loadData]);
 
-  const handleCardFocus = useCallback((item: MediaItem) => {
-    setStatusMessage(`Odak: ${item.title}`);
-    setActiveBillboardItem((prev) => ({
-      ...item,
-      overview:
-        item.overview ||
-        `${item.title} (${item.year || ''}) - ${item.languageBadge || 'Türkçe Dublaj & Altyazılı'}. HD kalitede kesintisiz izleyebilirsiniz.`,
-    }));
+  // Kumanda odağı: JS render döngüsünü tıkamamak için kart odağında tüm sayfayı re-render etmiyoruz
+  const handleCardFocus = useCallback((_item: MediaItem) => {
+    // Native odak animasyonu TVFocusableCard içinde sıfır gecikmeyle (useNativeDriver) çalışır
   }, []);
 
   const handleCardPress = useCallback((item: MediaItem) => {
@@ -124,26 +119,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onSelectMovie }) => {
         >
           {/* Netflix Hero Billboard */}
           {activeBillboardItem ? (
-            <TVFocusGuideView autoFocus={true}>
-              <HeroBillboard
-                item={activeBillboardItem}
-                onPlayPress={handlePlayPress}
-                onDetailPress={handleDetailPress}
-                onFocus={(action) => setStatusMessage(`Odak: ${action}`)}
-              />
-            </TVFocusGuideView>
+            <HeroBillboard
+              item={activeBillboardItem}
+              onPlayPress={handlePlayPress}
+              onDetailPress={handleDetailPress}
+              onFocus={(action) => setStatusMessage(`Odak: ${action}`)}
+            />
           ) : null}
 
           {/* Sitenin Sekmelerinden Oluşturulan Netflix Satırları */}
           {homeData.sections.map((section) => (
-            <TVFocusGuideView key={section.id} autoFocus={true}>
-              <HorizontalMediaRow
-                title={section.title}
-                items={section.items}
-                onCardPress={handleCardPress}
-                onCardFocus={handleCardFocus}
-              />
-            </TVFocusGuideView>
+            <HorizontalMediaRow
+              key={section.id}
+              title={section.title}
+              items={section.items}
+              onCardPress={handleCardPress}
+              onCardFocus={handleCardFocus}
+            />
           ))}
 
           {/* Alt Bilgi */}

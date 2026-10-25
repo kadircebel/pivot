@@ -149,10 +149,28 @@ const loadMore = useCallback(async () => {
 }, [provider]);
 
 const handleItemFocus = useCallback((index: number) => {
-  if (index >= movies.length - 8 && !isFetchingRef.current && hasNextRef.current) {
+  const rowIndex = Math.floor(index / 5);
+  if (rowIndex !== lastRowIndexRef.current) {
+    lastRowIndexRef.current = rowIndex;
+    flatListRef.current?.scrollToOffset({ offset: rowIndex * ROW_HEIGHT, animated: true });
+  }
+  if (index >= movies.length - 6 && !isFetchingRef.current && hasNextRef.current) {
     loadMore();
   }
 }, [loadMore, movies.length]);
+
+// Sayfa eklendiğinde Android ScrollView.onLayout'un satır hizalamasını bozmasını önle:
+useEffect(() => {
+  if (lastRowIndexRef.current > 0) {
+    const timer = setTimeout(() => {
+      flatListRef.current?.scrollToOffset({
+        offset: lastRowIndexRef.current * ROW_HEIGHT,
+        animated: true,
+      });
+    }, 50);
+    return () => clearTimeout(timer);
+  }
+}, [movies.length]);
 ```
 
 ### 2.3. Görsel Önbellek Kuralı
@@ -174,6 +192,21 @@ const handleItemFocus = useCallback((index: number) => {
      ```
   3. Kart odak stili: Beyaz border KESİNLİKLE YOKTUR (`borderWidth: 0`), 150ms donanım hızlandırmalı smooth zoom (`scale: 1.06`) ve saf Netflix Kırmızısı (`#E50914`) arka plan uygulanır.
   4. Liste altında bol tampon boşluk (`paddingBottom: 240px`) bırakılır.
+
+### 2.5. FlatList Yükseklik Çökmesi (Height Collapse) ve Menü Kesilmesini Önleme Standardı
+- **Sorun 1 (Siyah Ekran / 2px Çökme)**:
+  - Bir ekranda başlık (`header`) ve kardeş bileşenler varken `<FlatList>` üzerine `style={{ flex: 1 }}` veya benzeri inline flex stili verildiğinde, Android React Native Yoga/ReactScrollView motoru dikey yüksekliği hesaplayamaz. ScrollView yüksekliğini 1-2 piksele sıkıştırarak veriler çekilmiş olsa dahi ekranın tamamen siyah kalmasına neden olur.
+  - **Çözüm**: `<FlatList>` üzerinde `style={{ flex: 1 }}` ASLA kullanılmaz. Boşluklar yalnızca `contentContainerStyle` ile verilir. Ana taşıyıcı için `contentArea: { flex: 1, height: '100%' }` tanımlanır.
+- **Sorun 2 (Sol Menü Altında Harf Kesilmesi & Dengesiz Grid)**:
+  - Kartlar sol menünün (`x = 64`) hemen dibinden başladığında, odaklanınca zoom efektiyle sola taşarak sol menünün (`TVSidebar` zIndex: 100 opak kutu) altına girer ve başlık metninin ilk harfi (örn: *Otis* -> *tis*) dikey bir çizgiyle kesilir. Ayrıca liste sağ kenardan çok uzak, sola yapışık kalır.
+  - **Çözüm (Simetrik 5 Kolon Standardı)**:
+    - 1080p Android TV genişliği **960 DP**'dir. Sol menü **64 DP** kaplar, geriye **896 DP** kalır.
+    - Kart ölçüleri: `width: 144`, `height: 180` (ekrana dikeyde 2 tam satır sığar).
+    - Kolon aralığı: `columnWrapper: { gap: 24, marginBottom: 16 }` ($5 \times 144 + 4 \times 24 = 816\text{ DP}$).
+    - Kalan 80 DP, sol ve sağa eşit dağıtılarak `header` ve `gridContent` için `paddingHorizontal: 40` olarak sabitlenir ($40 + 816 + 40 = 896\text{ DP}$).
+    - İlk kart sol menüden tam 40 DP uzakta başlar, zoomlandığında menünün altına giremez; liste ekranın sağı ve solu arasında tam simetrik ortalanır.
+- **Sorun 3 (Canlı Ağ Motoruna Müdahale Yasağı)**:
+  - UI veya CSS kaynaklı görüntüleme problemlerinde çalışan `HdFilmCehennemiProvider.ts` koduna keyfi `AbortController` veya yapay timeout eklenerek canlı istekler engellenmemelidir.
 
 ---
 

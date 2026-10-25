@@ -8,8 +8,11 @@ import {
 } from 'react-native';
 import { TVFocusableCard } from '../components/TVFocusableCard';
 import { ProviderRegistry } from '../providers/ProviderRegistry';
+import { SNAPSHOT_SERIES_LIST } from '../providers/hdfilmcehennemi/HdFilmCehennemiProvider';
 import { Colors } from '../theme/colors';
 import { MediaItem } from '../types/media';
+
+const ROW_HEIGHT = 240;
 
 interface SeriesScreenProps {
   onSelectSeries?: (item: MediaItem) => void;
@@ -24,6 +27,7 @@ export const SeriesScreen: React.FC<SeriesScreenProps> = ({ onSelectSeries }) =>
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
 
   const flatListRef = useRef<FlatList<MediaItem>>(null);
+  const lastRowIndexRef = useRef<number>(0);
   const provider = ProviderRegistry.getActiveProvider();
 
   const isFetchingRef = useRef<boolean>(false);
@@ -104,11 +108,19 @@ export const SeriesScreen: React.FC<SeriesScreenProps> = ({ onSelectSeries }) =>
     }
   }, [provider]);
 
-  // TV D-Pad Kumanda: Kullanıcı son 2 satırdaki bir karta odaklandığında sonraki sayfayı erkenden tetikle
+  // TV D-Pad Kumanda: Aşağı inildiğinde aktif seçili satırı tepeye çek ve altındaki görünmeyen satırı ekrana getir
   const handleItemFocus = useCallback(
     (index: number) => {
+      const rowIndex = Math.floor(index / 5);
+      if (rowIndex !== lastRowIndexRef.current) {
+        lastRowIndexRef.current = rowIndex;
+        const targetOffset = rowIndex * ROW_HEIGHT;
+        flatListRef.current?.scrollToOffset({ offset: targetOffset, animated: true });
+      }
+
+      // Liste sonuna 3 satır (15 dizi) kala bir sonraki sayfayı erkenden çek
       if (
-        index >= series.length - 8 &&
+        index >= series.length - 15 &&
         !isFetchingRef.current &&
         hasNextRef.current
       ) {
@@ -118,12 +130,23 @@ export const SeriesScreen: React.FC<SeriesScreenProps> = ({ onSelectSeries }) =>
     [loadMore, series.length]
   );
 
+  // Yeni sayfa eklendiğinde Android ScrollView'ın satır hizasını bozmasını önle
+  useEffect(() => {
+    if (lastRowIndexRef.current > 0) {
+      const targetOffset = lastRowIndexRef.current * ROW_HEIGHT;
+      const timer = setTimeout(() => {
+        flatListRef.current?.scrollToOffset({ offset: targetOffset, animated: true });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [series.length]);
+
   const renderCard = useCallback(
     ({ item, index }: { item: MediaItem; index: number }) => (
       <TVFocusableCard
         item={item}
-        width={180}
-        height={270}
+        width={140}
+        height={170}
         hasTVPreferredFocus={index === 0}
         onFocus={() => handleItemFocus(index)}
         onPress={() => onSelectSeries?.(item)}
@@ -132,11 +155,11 @@ export const SeriesScreen: React.FC<SeriesScreenProps> = ({ onSelectSeries }) =>
     [handleItemFocus, onSelectSeries]
   );
 
-  // Butonsuz akıcı alt bilgi ve arka plan yükleyici
+  // Sabit yükseklikli alt bilgi (yüklenirken layout kaymasını ve titremeyi kesin olarak önler)
   const renderFooter = useCallback(() => {
     if (loadingMore) {
       return (
-        <View style={styles.footerLoaderBox}>
+        <View style={styles.footerContainer}>
           <ActivityIndicator size="small" color={Colors.primary} />
           <Text style={styles.footerLoadingText}>
             Daha fazla dizi yükleniyor (Sayfa {pageRef.current + 1})...
@@ -146,14 +169,14 @@ export const SeriesScreen: React.FC<SeriesScreenProps> = ({ onSelectSeries }) =>
     }
     if (!hasNextPage && series.length > 0) {
       return (
-        <View style={styles.footerInfoBox}>
+        <View style={styles.footerContainer}>
           <Text style={styles.footerEndText}>
             Tüm diziler yüklendi ({series.length} Dizi)
           </Text>
         </View>
       );
     }
-    return <View style={styles.footerSpacer} />;
+    return <View style={styles.footerContainer} />;
   }, [hasNextPage, loadingMore, series.length]);
 
   return (
@@ -179,19 +202,20 @@ export const SeriesScreen: React.FC<SeriesScreenProps> = ({ onSelectSeries }) =>
         </View>
       ) : (
         <FlatList
+          key="series-grid-5col"
           ref={flatListRef}
           data={series}
           renderItem={renderCard}
           keyExtractor={(item, index) => `${item.id}-${index}`}
-          numColumns={4}
+          numColumns={5}
           columnWrapperStyle={styles.columnWrapper}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.gridContent}
-          // TV D-Pad Odaklanma:
+          // TV D-Pad Odaklanma ve Kesintisiz Sayfalama:
           removeClippedSubviews={false}
           windowSize={11}
-          initialNumToRender={12}
-          maxToRenderPerBatch={8}
+          initialNumToRender={30}
+          maxToRenderPerBatch={30}
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           ListFooterComponent={renderFooter}
@@ -205,19 +229,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-    paddingLeft: 88,
-    paddingRight: 32,
-    paddingTop: 24,
+    paddingLeft: 64, // Sol menünün bittiği yerden başlar
+    paddingTop: 16,
   },
   header: {
-    marginBottom: 16,
+    paddingHorizontal: 46, // Kartlar ile tam 46px simetrik hizalama
+    marginBottom: 10,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: 0.5,
@@ -237,9 +261,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 4,
+    marginTop: 2,
+  },
+  flatList: {
+    flex: 1,
   },
   loaderBox: {
     flex: 1,
@@ -252,17 +279,18 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   gridContent: {
-    paddingBottom: 40,
+    paddingHorizontal: 46, // 46px sol ve sağ kenar boşluğu -> Ekranda tam ortalı, sol menüden 46px uzakta
+    paddingBottom: 480, // En son satırın dahi ekranın en tepesine kadar çıkabilmesi için tam ekran tampon
   },
   columnWrapper: {
-    gap: 20,
-    marginBottom: 22,
+    gap: 26, // 5 kart (140) + 4 boşluk (26) = 804px. 804 + 92 = 896px = Tam içerik genişliği
+    marginBottom: 10, // Kart yüksekliği 230 + margin 10 = Tam 240px satır yüksekliği (ROW_HEIGHT = 240)
   },
-  footerLoaderBox: {
+  footerContainer: {
+    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 24,
     gap: 12,
   },
   footerLoadingText: {
@@ -270,18 +298,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  footerInfoBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 24,
-  },
   footerEndText: {
     color: Colors.textMuted,
     fontSize: 13,
     fontWeight: '600',
-  },
-  footerSpacer: {
-    height: 40,
   },
 });
 

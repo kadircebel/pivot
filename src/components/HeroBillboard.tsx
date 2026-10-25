@@ -22,7 +22,7 @@ interface HeroBillboardProps {
   onFocus?: (action: string) => void;
 }
 
-export const HeroBillboard: React.FC<HeroBillboardProps> = ({
+const HeroBillboardComponent: React.FC<HeroBillboardProps> = ({
   item,
   onPlayPress,
   onDetailPress,
@@ -116,6 +116,8 @@ export const HeroBillboard: React.FC<HeroBillboardProps> = ({
     </View>
   );
 };
+
+export const HeroBillboard = React.memo(HeroBillboardComponent);
 
 const styles = StyleSheet.create({
   container: {

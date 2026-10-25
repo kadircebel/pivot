@@ -29,24 +29,41 @@ interface TVFocusableCardProps {
   hasTVPreferredFocus?: boolean;
   isFirst?: boolean;
   isLast?: boolean;
+  nextFocusUp?: number;
+  nextFocusDown?: number;
+  nextFocusLeft?: number;
+  nextFocusRight?: number;
+  style?: any;
   onPress: (item: MediaItem) => void;
   onFocus?: (item: MediaItem) => void;
 }
 
-export const TVFocusableCard: React.FC<TVFocusableCardProps> = ({
+const TVFocusableCardComponent: React.FC<TVFocusableCardProps> = ({
   item,
-  width = 160,
-  height = 240,
+  width = 124,
+  height = 180,
   hasTVPreferredFocus = false,
   isFirst = false,
   isLast = false,
+  nextFocusUp,
+  nextFocusDown,
+  nextFocusLeft,
+  nextFocusRight,
+  style,
   onPress,
   onFocus,
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [currentUri, setCurrentUri] = useState<string>(item.posterUrl || '');
-  const [nodeTag, setNodeTag] = useState<number | undefined>(undefined);
+  const pressableRef = useRef<View>(null);
+  const [selfTag, setSelfTag] = useState<number | undefined>(undefined);
+
+  const updateTag = useCallback(() => {
+    if (pressableRef.current && isLast) {
+      setSelfTag(findNodeHandle(pressableRef.current) || undefined);
+    }
+  }, [isLast]);
 
   // Smooth Zoom (Büyüme) Animasyonu
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -88,8 +105,14 @@ export const TVFocusableCard: React.FC<TVFocusableCardProps> = ({
 
   return (
     <Pressable
+      ref={pressableRef}
+      onLayout={updateTag}
       hasTVPreferredFocus={hasTVPreferredFocus}
       focusable={true}
+      nextFocusUp={nextFocusUp}
+      nextFocusDown={nextFocusDown}
+      nextFocusLeft={nextFocusLeft}
+      nextFocusRight={nextFocusRight || (isLast && selfTag ? selfTag : undefined)}
       onFocus={handleFocus}
       onBlur={handleBlur}
       onPress={handlePress}
@@ -97,6 +120,7 @@ export const TVFocusableCard: React.FC<TVFocusableCardProps> = ({
         styles.pressableWrapper,
         { width },
         isFocused && styles.pressableFocused,
+        style,
       ]}
     >
       <Animated.View
@@ -153,32 +177,34 @@ export const TVFocusableCard: React.FC<TVFocusableCardProps> = ({
           ) : null}
         </View>
 
-        <Text
-          style={[styles.title, isFocused && styles.titleFocused]}
-          numberOfLines={2}
-        >
-          {item.title}
-        </Text>
+        <View style={styles.cardInfo}>
+          <Text
+            style={[styles.title, isFocused && styles.titleFocused]}
+            numberOfLines={2}
+          >
+            {item.title}
+          </Text>
 
-        {item.year ? (
-          <Text style={styles.metaText}>{item.year}</Text>
-        ) : null}
+          <Text style={styles.metaText}>{item.year || ' '}</Text>
+        </View>
       </Animated.View>
     </Pressable>
   );
 };
 
+export const TVFocusableCard = React.memo(TVFocusableCardComponent);
+
 const styles = StyleSheet.create({
   pressableWrapper: {
-    marginRight: 16,
-    paddingVertical: 8,
+    paddingVertical: 4,
+    overflow: 'visible',
   },
   pressableFocused: {
     zIndex: 10,
   },
   animatedCard: {
     width: '100%',
-    // Beyaz border tamamen kaldırıldı! Yalnızca smooth zoom ve zIndex artışı var.
+    overflow: 'visible',
     borderWidth: 0,
     borderColor: 'transparent',
   },
@@ -186,12 +212,19 @@ const styles = StyleSheet.create({
     zIndex: 10,
     elevation: 8,
   },
+  cardInfo: {
+    height: 48,
+    marginTop: 4,
+    justifyContent: 'flex-start',
+  },
   posterWrapper: {
     width: '100%',
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#1E2026',
     position: 'relative',
+    borderWidth: 0,
+    borderColor: 'transparent',
   },
   posterImage: {
     width: '100%',
@@ -202,26 +235,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.surfaceElevated,
-    padding: 8,
+    padding: 6,
   },
   fallbackIcon: {
-    fontSize: 32,
-    marginBottom: 8,
+    fontSize: 26,
+    marginBottom: 6,
   },
   fallbackText: {
     color: Colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
     fontWeight: '600',
   },
   imdbBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
+    top: 6,
+    right: 6,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
     borderWidth: 1,
@@ -229,27 +262,27 @@ const styles = StyleSheet.create({
   },
   imdbStar: {
     color: Colors.imdbGold,
-    fontSize: 10,
-    marginRight: 3,
+    fontSize: 9,
+    marginRight: 2,
   },
   imdbText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   languageBadge: {
     position: 'absolute',
-    bottom: 8,
-    left: 8,
+    bottom: 6,
+    left: 6,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
     maxWidth: '85%',
   },
   languageText: {
     color: '#E5E5E5',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
   },
   focusedOverlay: {
@@ -259,9 +292,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   playButtonCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -269,15 +302,14 @@ const styles = StyleSheet.create({
   },
   playIcon: {
     color: '#FFFFFF',
-    fontSize: 20,
-    marginLeft: 3,
+    fontSize: 16,
+    marginLeft: 2,
   },
   title: {
-    marginTop: 8,
     color: Colors.textSecondary,
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
-    lineHeight: 17,
+    lineHeight: 14,
   },
   titleFocused: {
     color: '#FFFFFF',
@@ -285,7 +317,8 @@ const styles = StyleSheet.create({
   },
   metaText: {
     color: Colors.textMuted,
-    fontSize: 11,
+    fontSize: 10,
+    lineHeight: 13,
     marginTop: 2,
   },
 });

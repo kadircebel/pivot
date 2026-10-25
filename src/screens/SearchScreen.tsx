@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -7,23 +7,24 @@ import {
   Text,
   TextInput,
   View,
+  findNodeHandle,
 } from 'react-native';
 import { TVFocusableCard } from '../components/TVFocusableCard';
 import { ProviderRegistry } from '../providers/ProviderRegistry';
 import { Colors } from '../theme/colors';
 import { MediaItem } from '../types/media';
 
-// Temel harf ve rakam düzeni (Türkçe karakter destekli)
-const RAW_KEYBOARD = [
-  ['A', 'B', 'C', 'Ç', 'D', 'E', 'F', '1', '2', '3'],
-  ['G', 'Ğ', 'H', 'I', 'İ', 'J', 'K', '4', '5', '6'],
-  ['L', 'M', 'N', 'O', 'Ö', 'P', 'R', '7', '8', '9'],
-  ['S', 'Ş', 'T', 'U', 'Ü', 'V', 'Y', 'Z', '0', '-'],
+const ROW_HEIGHT = 240;
+
+const SUGGESTIONS = [
+  'Örümcek Adam',
+  'Mayday',
+  'Supergirl',
+  'Dune',
+  'Mortal Kombat',
+  'Batman',
+  'Yıldız Savaşları',
 ];
-
-const SPECIAL_KEYS = ['SHIFT', 'BOŞLUK', 'SİL', 'TEMİZLE', 'ARA'];
-
-const SUGGESTIONS = ['Örümcek Adam', 'Mayday', 'Supergirl', 'Dune', 'Mortal Kombat'];
 
 interface SearchScreenProps {
   onSelectMovie?: (item: MediaItem) => void;
@@ -34,28 +35,36 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectMovie }) => 
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<MediaItem[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
-  const [focusedKey, setFocusedKey] = useState<string | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
 
-  // Android standardı: Başlangıçta ilk harf BÜYÜK, sonraki harfler KÜÇÜK
-  const [isUppercase, setIsUppercase] = useState(true);
-
+  const flatListRef = useRef<FlatList<MediaItem>>(null);
+  const lastRowIndexRef = useRef<number>(0);
   const provider = ProviderRegistry.getActiveProvider();
   const searchTimeoutRef = useRef<any>(null);
   const inputRef = useRef<TextInput>(null);
 
-  // Klavyenin anlık büyük/küçük harf görünümü
-  const currentKeyboard = useMemo(() => {
-    return RAW_KEYBOARD.map((row) =>
-      row.map((k) => {
-        // Rakam ve tire değişmez
-        if (/\d|-/.test(k)) return k;
-        return isUppercase
-          ? k.toLocaleUpperCase('tr-TR')
-          : k.toLocaleLowerCase('tr-TR');
-      })
-    );
-  }, [isUppercase]);
+  // TV D-Pad Navigasyon Bağlantı Noktaları (Native Tags)
+  const searchBarRef = useRef<View>(null);
+  const firstChipRef = useRef<View>(null);
+  const [searchBarTag, setSearchBarTag] = useState<number | undefined>(undefined);
+  const [firstChipTag, setFirstChipTag] = useState<number | undefined>(undefined);
+
+  const updateNativeTags = useCallback(() => {
+    if (searchBarRef.current) {
+      const sTag = findNodeHandle(searchBarRef.current);
+      if (sTag) setSearchBarTag(sTag);
+    }
+    if (firstChipRef.current) {
+      const cTag = findNodeHandle(firstChipRef.current);
+      if (cTag) setFirstChipTag(cTag);
+    }
+  }, []);
+
+  useEffect(() => {
+    updateNativeTags();
+    const timer = setTimeout(updateNativeTags, 150);
+    return () => clearTimeout(timer);
+  }, [updateNativeTags]);
 
   // Doğrudan arama yap
   const executeSearch = useCallback(
@@ -65,7 +74,9 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectMovie }) => 
       setHasSearched(!!q);
       try {
         const res = await provider.search(q);
-        setResults(res.items);
+        setResults(res.items || []);
+        lastRowIndexRef.current = 0;
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch (err) {
         console.warn('Search error:', err);
         setResults([]);
@@ -76,7 +87,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectMovie }) => 
     [provider]
   );
 
-  // Yazarken D-pad gecikmeli (debounced) arama
+  // Yazarken gecikmeli (debounced) canlı arama
   const triggerDebouncedSearch = useCallback(
     (searchQuery: string) => {
       if (searchTimeoutRef.current) {
@@ -87,7 +98,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectMovie }) => 
         setLoading(true);
         searchTimeoutRef.current = setTimeout(() => {
           executeSearch(q);
-        }, 350);
+        }, 400);
       } else if (q.length === 0) {
         searchTimeoutRef.current = setTimeout(() => {
           executeSearch('');
@@ -97,13 +108,13 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectMovie }) => 
     [executeSearch]
   );
 
-  // Sayfa ilk açıldığında popüler arama önerilerini getir
+  // Sayfa ilk açıldığında popüler içerikleri getir
   useEffect(() => {
     let isMounted = true;
     provider
       .search('')
       .then((res) => {
-        if (isMounted && res.items.length > 0) {
+        if (isMounted && res.items && res.items.length > 0) {
           setResults(res.items);
         }
       })
@@ -115,257 +126,213 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectMovie }) => 
     };
   }, [provider]);
 
-  const handleKeyPress = useCallback(
-    (key: string) => {
-      if (key === 'SHIFT') {
-        setIsUppercase((prev) => !prev);
-      } else if (key === 'BOŞLUK') {
-        const nextQuery = query + ' ';
-        setQuery(nextQuery);
-        setIsUppercase(true);
-      } else if (key === 'SİL') {
-        const nextQuery = query.slice(0, -1);
-        setQuery(nextQuery);
-        if (nextQuery.length === 0 || nextQuery.endsWith(' ')) {
-          setIsUppercase(true);
-        }
-        triggerDebouncedSearch(nextQuery);
-      } else if (key === 'TEMİZLE') {
-        setQuery('');
-        setIsUppercase(true);
-        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-        executeSearch('');
-      } else if (key === 'ARA') {
-        if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-        executeSearch(query);
-      } else {
-        const nextQuery = query + key;
-        setQuery(nextQuery);
-        if (isUppercase) {
-          setIsUppercase(false);
-        }
-        triggerDebouncedSearch(nextQuery);
-      }
+  // TV D-Pad Kumanda: Aşağı inildiğinde aktif seçili satırı tepeye çek
+  const handleItemFocus = useCallback((index: number) => {
+    const rowIndex = Math.floor(index / 5);
+    if (rowIndex !== lastRowIndexRef.current) {
+      lastRowIndexRef.current = rowIndex;
+      const targetOffset = rowIndex * ROW_HEIGHT;
+      flatListRef.current?.scrollToOffset({ offset: targetOffset, animated: true });
+    }
+  }, []);
+
+  const handleClear = useCallback(() => {
+    setQuery('');
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    executeSearch('');
+    inputRef.current?.focus();
+  }, [executeSearch]);
+
+  const handleSuggestionPress = useCallback(
+    (text: string) => {
+      setQuery(text);
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+      executeSearch(text);
     },
-    [executeSearch, isUppercase, query, triggerDebouncedSearch]
+    [executeSearch]
   );
 
   const renderCard = useCallback(
-    ({ item }: { item: MediaItem }) => (
-      <TVFocusableCard
-        item={item}
-        width={155}
-        height={232}
-        onPress={() => onSelectMovie?.(item)}
-      />
-    ),
-    [onSelectMovie]
+    ({ item, index }: { item: MediaItem; index: number }) => {
+      const isFirstRow = index < 5;
+      return (
+        <TVFocusableCard
+          item={item}
+          width={140}
+          height={170}
+          nextFocusUp={isFirstRow ? (firstChipTag || searchBarTag) : undefined}
+          onFocus={() => handleItemFocus(index)}
+          onPress={() => onSelectMovie?.(item)}
+        />
+      );
+    },
+    [firstChipTag, handleItemFocus, onSelectMovie, searchBarTag]
   );
 
   return (
     <View style={styles.container}>
-      <View style={styles.leftPanel}>
-        {/* Arama Kutusu (Android TV Sistem Klavyeli & Sesli Arama Desteği) */}
-        <View
-          style={[
-            styles.searchInputBox,
-            isInputFocused && styles.searchInputBoxFocused,
-          ]}
-        >
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            ref={inputRef}
-            value={query}
-            onChangeText={(text) => {
-              setQuery(text);
-              triggerDebouncedSearch(text);
-            }}
-            onSubmitEditing={() => {
-              if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-              executeSearch(query);
-            }}
-            placeholder="Ara veya sesle yaz..."
-            placeholderTextColor="#7A8090"
-            style={styles.textInputField}
+      {/* Üst Arama Çubuğu ve Başlık Alanı */}
+      <View style={styles.header}>
+        <View style={styles.titleRow}>
+          <Text style={styles.headerTitle}>Arama</Text>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>Android TV Klavyesi & Sesli Arama Aktif</Text>
+          </View>
+        </View>
+
+        {/* Yerel Sistem Klavyeli Arama Çubuğu (Kumanda D-Pad Uyumlu Pressable Kapsayıcı) */}
+        <View style={styles.searchRow}>
+          <Pressable
+            ref={searchBarRef}
             focusable={true}
+            hasTVPreferredFocus={true}
+            android_disableSound={true}
+            nextFocusDown={firstChipTag}
             onFocus={() => setIsInputFocused(true)}
             onBlur={() => setIsInputFocused(false)}
-            returnKeyType="search"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+            onPress={() => {
+              inputRef.current?.focus();
+            }}
+            onLayout={updateNativeTags}
+            style={({ focused }) => [
+              styles.searchInputContainer,
+              (focused || isInputFocused) && styles.searchInputContainerFocused,
+            ]}
+          >
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              ref={inputRef}
+              value={query}
+              onChangeText={(text) => {
+                setQuery(text);
+                triggerDebouncedSearch(text);
+              }}
+              onSubmitEditing={() => {
+                if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+                executeSearch(query);
+              }}
+              placeholder="Film, dizi veya oyuncu ara... (Yazmak için OK'e basın)"
+              placeholderTextColor="#7A8090"
+              style={styles.textInputField}
+              returnKeyType="search"
+              autoCapitalize="none"
+              autoCorrect={false}
+              showSoftInputOnFocus={true}
+              onFocus={() => setIsInputFocused(true)}
+              onBlur={() => setIsInputFocused(false)}
+            />
+          </Pressable>
+
           {query.length > 0 ? (
             <Pressable
               focusable={true}
               android_disableSound={true}
-              onPress={() => {
-                setQuery('');
-                if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-                executeSearch('');
-              }}
+              nextFocusDown={firstChipTag}
+              onPress={handleClear}
               style={({ focused }) => [
-                styles.clearInputButton,
-                focused && styles.clearInputButtonFocused,
+                styles.actionButton,
+                focused && styles.actionButtonFocused,
               ]}
             >
-              <Text style={styles.clearInputText}>✕</Text>
+              <Text style={styles.actionButtonText}>✕ Temizle</Text>
             </Pressable>
           ) : null}
+
+          <Pressable
+            focusable={true}
+            android_disableSound={true}
+            nextFocusDown={firstChipTag}
+            onPress={() => {
+              if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+              executeSearch(query);
+            }}
+            style={({ focused }) => [
+              styles.actionButton,
+              styles.searchActionButton,
+              focused && styles.actionButtonFocused,
+            ]}
+          >
+            <Text style={styles.actionButtonText}>Ara</Text>
+          </Pressable>
         </View>
 
-        {/* TV Kumandası Uyumlu Akıllı Ekran Klavyesi */}
-        <View style={styles.keyboardContainer}>
-          {currentKeyboard.map((row, rowIndex) => (
-            <View key={rowIndex} style={styles.keyboardRow}>
-              {row.map((char) => {
-                const isFocused = focusedKey === char;
-                return (
-                  <Pressable
-                    key={char}
-                    focusable={true}
-                    hasTVPreferredFocus={rowIndex === 0 && char === 'A'}
-                    android_disableSound={true}
-                    onFocus={() => setFocusedKey(char)}
-                    onBlur={() => setFocusedKey(null)}
-                    onPress={() => handleKeyPress(char)}
-                    style={[
-                      styles.keyButton,
-                      isFocused && styles.keyButtonFocused,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.keyText,
-                        isFocused && styles.keyTextFocused,
-                      ]}
-                    >
-                      {char}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
-
-          {/* Özel Kontrol Tuşları Sırası */}
-          <View style={styles.keyboardRow}>
-            {SPECIAL_KEYS.map((sKey) => {
-              const isFocused = focusedKey === sKey;
-              const isShiftActive = sKey === 'SHIFT' && isUppercase;
-
-              let label = sKey;
-              if (sKey === 'SHIFT') {
-                label = isUppercase ? '⇧ ABC' : '⇩ abc';
-              } else if (sKey === 'BOŞLUK') {
-                label = '␣ Boşluk';
-              } else if (sKey === 'SİL') {
-                label = '⌫';
-              } else if (sKey === 'TEMİZLE') {
-                label = '✕';
-              } else if (sKey === 'ARA') {
-                label = '🔍 Ara';
-              }
-
-              return (
-                <Pressable
-                  key={sKey}
-                  focusable={true}
-                  android_disableSound={true}
-                  onFocus={() => setFocusedKey(sKey)}
-                  onBlur={() => setFocusedKey(null)}
-                  onPress={() => handleKeyPress(sKey)}
-                  style={[
-                    styles.specialKeyButton,
-                    isShiftActive && styles.shiftActiveButton,
-                    isFocused && styles.keyButtonFocused,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.specialKeyText,
-                      isFocused && styles.keyTextFocused,
-                    ]}
-                  >
-                    {label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+        {/* Hızlı Arama Önerileri (Etiketler - D-pad ile yukarı basıldığında doğrudan arama çubuğuna geçer) */}
+        <View style={styles.suggestionsContainer}>
+          <Text style={styles.suggestionsLabel}>Popüler Aramalar:</Text>
+          <View style={styles.suggestionsList}>
+            {SUGGESTIONS.map((item, idx) => (
+              <Pressable
+                key={item}
+                ref={idx === 0 ? firstChipRef : undefined}
+                focusable={true}
+                android_disableSound={true}
+                nextFocusUp={searchBarTag}
+                onPress={() => handleSuggestionPress(item)}
+                onLayout={idx === 0 ? updateNativeTags : undefined}
+                style={({ focused }) => [
+                  styles.suggestionChip,
+                  focused && styles.suggestionChipFocused,
+                ]}
+              >
+                <Text style={styles.suggestionChipText}>{item}</Text>
+              </Pressable>
+            ))}
           </View>
         </View>
 
-        {/* Hızlı Arama Önerileri */}
-        <View style={styles.suggestionsRow}>
-          <Text style={styles.suggestionsLabel}>Önerilenler:</Text>
-          {SUGGESTIONS.map((s) => (
-            <Pressable
-              key={s}
-              focusable={true}
-              android_disableSound={true}
-              onPress={() => {
-                setQuery(s);
-                if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-                executeSearch(s);
-              }}
-              style={({ focused }) => [
-                styles.suggestionPill,
-                focused && styles.suggestionPillFocused,
-              ]}
-            >
-              <Text style={styles.suggestionText}>{s}</Text>
-            </Pressable>
-          ))}
+        {/* Arama Durumu / Sonuç Başlığı */}
+        <View style={styles.statusRow}>
+          <Text style={styles.resultsTitle}>
+            {loading
+              ? 'Aranıyor...'
+              : hasSearched
+              ? `Arama Sonuçları: "${query}" (${results.length} içerik)`
+              : `Popüler Öneriler (${results.length})`}
+          </Text>
         </View>
       </View>
 
-      {/* Sağ Panel: Arama Sonuçları */}
-      <View style={styles.rightPanel}>
-        <Text style={styles.panelTitle}>
-          {loading
-            ? 'Aranıyor...'
-            : hasSearched
-            ? `Arama Sonuçları: "${query}" (${results.length})`
-            : 'Popüler Arama Önerileri'}
-        </Text>
-
-        {loading ? (
-          <View style={styles.loaderBox}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.loadingText}>Sonuçlar aranıyor...</Text>
-          </View>
-        ) : results.length > 0 ? (
-          <FlatList
-            key="search-grid-3col"
-            data={results}
-            renderItem={renderCard}
-            keyExtractor={(item) => item.id}
-            numColumns={3}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.resultsGrid}
-            columnWrapperStyle={styles.columnWrapper}
-            removeClippedSubviews={true}
-            initialNumToRender={6}
-            windowSize={5}
-          />
-        ) : hasSearched ? (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyIcon}>🎬</Text>
-            <Text style={styles.emptyText}>
-              "{query}" için arama sonucu bulunamadı.
-            </Text>
-            <Text style={styles.emptySubText}>
-              Farklı bir kelime deneyebilir veya önerilenlere göz atabilirsiniz.
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.emptyBox}>
-            <Text style={styles.emptyIcon}>🔍</Text>
-            <Text style={styles.emptyText}>
-              Aramak istediğiniz filmi veya diziyi soldaki klavyeden yazın.
-            </Text>
-          </View>
-        )}
-      </View>
+      {/* Arama Sonuçları Izgarası (Full-width 5 Kolon Standardı) */}
+      {loading && results.length === 0 ? (
+        <View style={styles.loaderBox}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Sonuçlar aranıyor...</Text>
+        </View>
+      ) : results.length > 0 ? (
+        <FlatList
+          key="search-grid-5col"
+          ref={flatListRef}
+          data={results}
+          renderItem={renderCard}
+          keyExtractor={(item, index) => `${item.id}-${index}`}
+          numColumns={5}
+          columnWrapperStyle={styles.columnWrapper}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.gridContent}
+          removeClippedSubviews={false}
+          windowSize={11}
+          initialNumToRender={20}
+          maxToRenderPerBatch={20}
+        />
+      ) : hasSearched ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyIcon}>🎬</Text>
+          <Text style={styles.emptyText}>"{query}" için arama sonucu bulunamadı.</Text>
+          <Text style={styles.emptySubText}>
+            Farklı bir arama terimi deneyebilir veya popüler önerilere göz atabilirsiniz.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyIcon}>🔍</Text>
+          <Text style={styles.emptyText}>
+            Aramak istediğiniz filmi veya diziyi yukarıdaki arama kutusuna yazın.
+          </Text>
+          <Text style={styles.emptySubText}>
+            Kumandanızın 'OK' tuşu ile klavyeyi açabilir veya mikrofon ile sesli arama yapabilirsiniz.
+          </Text>
+        </View>
+      )}
     </View>
   );
 };
@@ -373,154 +340,148 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onSelectMovie }) => 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    flexDirection: 'row',
     backgroundColor: Colors.background,
-    paddingLeft: 84,
-    paddingRight: 20,
-    paddingTop: 20,
+    paddingLeft: 64, // Sol menünün bittiği yerden başlar
+    paddingTop: 16,
   },
-  leftPanel: {
-    width: 270,
-    paddingRight: 10,
-    borderRightWidth: 1,
-    borderRightColor: '#222',
+  header: {
+    paddingHorizontal: 46, // Kartlar ile tam 46px simetrik hizalama
+    marginBottom: 12,
   },
-  searchInputBox: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  badge: {
+    marginLeft: 14,
+    backgroundColor: 'rgba(229, 9, 20, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(229, 9, 20, 0.4)',
+  },
+  badgeText: {
+    color: Colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  searchInputContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#181A20',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1.5,
+    borderRadius: 10,
+    borderWidth: 2,
     borderColor: '#2D3038',
-    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 4,
   },
-  searchInputBoxFocused: {
-    borderColor: Colors.primary,
-    backgroundColor: '#20232B',
+  searchInputContainerFocused: {
+    borderColor: '#FFFFFF',
+    backgroundColor: '#20242E',
+    transform: [{ scale: 1.01 }],
+    elevation: 8,
   },
   searchIcon: {
-    fontSize: 15,
-    marginRight: 6,
+    fontSize: 18,
+    marginRight: 10,
   },
   textInputField: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
-    paddingVertical: 2,
-    paddingHorizontal: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 4,
   },
-  clearInputButton: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+  actionButton: {
     backgroundColor: '#2A2D36',
-  },
-  clearInputButtonFocused: {
-    backgroundColor: Colors.primary,
-  },
-  clearInputText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  keyboardContainer: {
-    backgroundColor: '#13151A',
-    padding: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#20232A',
+    marginLeft: 8,
+    borderWidth: 1.5,
+    borderColor: '#383C48',
   },
-  keyboardRow: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  keyButton: {
-    flex: 1,
-    height: 30,
-    marginHorizontal: 1,
-    backgroundColor: '#1E212A',
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  specialKeyButton: {
-    flex: 1,
-    height: 30,
-    marginHorizontal: 1,
-    backgroundColor: '#262933',
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shiftActiveButton: {
-    backgroundColor: 'rgba(229, 9, 20, 0.4)',
-    borderWidth: 1,
+  searchActionButton: {
+    backgroundColor: 'rgba(229, 9, 20, 0.85)',
     borderColor: Colors.primary,
   },
-  keyButtonFocused: {
+  actionButtonFocused: {
     backgroundColor: Colors.primary,
-    transform: [{ scale: 1.08 }],
-    elevation: 6,
-    zIndex: 10,
+    borderColor: '#FFFFFF',
+    transform: [{ scale: 1.05 }],
   },
-  keyText: {
-    color: '#E0E3EB',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  specialKeyText: {
-    color: '#E0E3EB',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  keyTextFocused: {
+  actionButtonText: {
     color: '#FFFFFF',
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '800',
   },
-  suggestionsRow: {
+  suggestionsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
-    marginTop: 8,
+    flexWrap: 'wrap',
+    marginBottom: 8,
   },
   suggestionsLabel: {
     color: Colors.textMuted,
-    fontSize: 10,
-    fontWeight: '600',
-    marginRight: 4,
-    marginBottom: 3,
+    fontSize: 12,
+    fontWeight: '700',
+    marginRight: 10,
+    marginBottom: 6,
   },
-  suggestionPill: {
-    backgroundColor: '#1A1C24',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 8,
-    marginRight: 5,
-    marginBottom: 5,
+  suggestionsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  suggestionChip: {
+    backgroundColor: '#1E2129',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#282B35',
+    borderColor: '#2D323E',
+    marginBottom: 6,
   },
-  suggestionPillFocused: {
+  suggestionChipFocused: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    borderColor: '#FFFFFF',
+    transform: [{ scale: 1.06 }],
   },
-  suggestionText: {
-    color: Colors.textSecondary,
-    fontSize: 10,
-    fontWeight: '600',
+  suggestionChipText: {
+    color: '#E0E4EC',
+    fontSize: 12,
+    fontWeight: '700',
   },
-  rightPanel: {
-    flex: 1,
-    paddingLeft: 18,
+  statusRow: {
+    marginTop: 4,
   },
-  panelTitle: {
-    fontSize: 17,
+  resultsTitle: {
+    fontSize: 15,
     fontWeight: '800',
     color: '#FFFFFF',
-    marginBottom: 10,
+  },
+  gridContent: {
+    paddingHorizontal: 46, // 46px simetrik kenar hizalaması
+    paddingBottom: 480, // Aşağı kaydırmada son satırın da rahatça tepeye çıkması için tampon
+  },
+  columnWrapper: {
+    gap: 26, // 5 kart (140) + 4 boşluk (26) = 804px. 804 + 92 = 896px tam TV alanı
+    marginBottom: 10, // ROW_HEIGHT = 240
   },
   loaderBox: {
     flex: 1,
@@ -529,21 +490,15 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: Colors.textSecondary,
-    marginTop: 12,
     fontSize: 14,
-    fontWeight: '600',
-  },
-  columnWrapper: {
-    gap: 16,
-    marginBottom: 16,
-  },
-  resultsGrid: {
-    paddingBottom: 80,
+    marginTop: 12,
   },
   emptyBox: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 40,
+    marginTop: 40,
   },
   emptyIcon: {
     fontSize: 48,
@@ -551,14 +506,15 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: Colors.textSecondary,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
   },
   emptySubText: {
     color: Colors.textMuted,
-    fontSize: 12,
-    marginTop: 6,
+    fontSize: 13,
+    marginTop: 8,
     textAlign: 'center',
+    lineHeight: 18,
   },
 });

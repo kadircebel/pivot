@@ -11,12 +11,14 @@
 
 ---
 
-## 📥 İndir & Build (v1.0 Beta Deneme Sürümü)
+## 📥 İndir & Hazır Sürümler (Pre-built APKs)
 
-Uygulamayı herhangi bir derleme yapmadan doğrudan Android TV veya TV Box cihazınızda denemek için hazır derlenmiş bağımsız (standalone) APK dosyasını kullanabilirsiniz:
+Uygulamayı herhangi bir derleme yapmadan doğrudan Android TV veya TV Box cihazınızda denemek için hazır derlenmiş bağımsız (standalone) APK dosyalarını kullanabilirsiniz:
 
+- ⬇️ **[MovieTvApp-v2-release.apk (v2.0 Güncel Sürüm)](build/MovieTvApp-v2-release.apk)**  
+  *(Önerilen Sürüm — Yeni Android TV Leanback logosu ve banner'ı, Android TV yerel sistem klavyesi (Gboard) ve mikrofonla sesli arama desteği, anasayfa sabit satır başlı yatay kaydırma, 5 kolonlu simetrik film/dizi kataloğu ve TV D-pad kilit korumaları.)*
 - ⬇️ **[MovieTvApp-release.apk (v1.0 Beta)](build/MovieTvApp-release.apk)**  
-  *(Bağımsız Release derlemesi — Geliştirici sunucusu veya Metro bağlantısı gerektirmez, doğrudan USB veya dosya yöneticisiyle TV kutusuna yüklenebilir.)*
+  *(İlk Bağımsız Beta Sürümü — Temel D-pad navigasyon ve ExoPlayer oynatıcı prototipi.)*
 
 ---
 
